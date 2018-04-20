@@ -1,3 +1,19 @@
+/*
+ * Copyright 2018 ACINQ SAS
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package fr.acinq.eclair.db
 
 import java.sql.DriverManager
@@ -28,8 +44,8 @@ class SqlitePaymentsDbSpec extends FunSuite {
     assert(db.listPayments() === Nil)
     db.addPayment(p1)
     db.addPayment(p2)
-    assert(db.listPayments() === List(p1, p2))
-    assert(db.findByPaymentHash(p1.payment_hash) === p1)
-    intercept[NoSuchElementException](db.findByPaymentHash(BinaryData("6e7e8018f05e169cf1d99e77dc22cb372d09f10b6a81f1eae410718c56cad187")))
+    assert(db.listPayments().toList === List(p1, p2))
+    assert(db.findByPaymentHash(p1.payment_hash) === Some(p1))
+    assert(db.findByPaymentHash("6e7e8018f05e169cf1d99e77dc22cb372d09f10b6a81f1eae410718c56cad187") === None)
   }
 }

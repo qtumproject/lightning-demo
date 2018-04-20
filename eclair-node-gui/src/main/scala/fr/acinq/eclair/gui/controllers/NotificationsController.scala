@@ -1,3 +1,19 @@
+/*
+ * Copyright 2018 ACINQ SAS
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package fr.acinq.eclair.gui.controllers
 
 import javafx.animation._
@@ -53,31 +69,35 @@ class NotificationsController extends Logging {
         // set notification content
         notifPaneController.titleLabel.setText(title)
         notifPaneController.messageLabel.setText(message.capitalize)
-        notificationType match {
+        val autoDismissed = notificationType match {
           case NOTIFICATION_SUCCESS => {
             notifPaneController.rootPane.setStyle("-fx-border-color: #28d087")
             notifPaneController.icon.setImage(successIcon)
+            true
           }
           case NOTIFICATION_ERROR => {
             notifPaneController.rootPane.setStyle("-fx-border-color: #d43c4e")
             notifPaneController.icon.setImage(errorIcon)
+            false
           }
           case NOTIFICATION_INFO => {
             notifPaneController.rootPane.setStyle("-fx-border-color: #409be6")
             notifPaneController.icon.setImage(infoIcon)
+            true
           }
-          case _ =>
+          case _ => true
         }
 
         // in/out animations
         val showAnimation = getShowAnimation(notifPaneController.rootPane)
+
         val dismissAnimation = getDismissAnimation(notifPaneController.rootPane)
         dismissAnimation.setOnFinished(new EventHandler[ActionEvent] {
           override def handle(event: ActionEvent) = notifsVBox.getChildren.remove(root)
         })
         notifPaneController.copyButton.setOnAction(new EventHandler[ActionEvent] {
           override def handle(event: ActionEvent) = {
-            dismissAnimation.stop // automatic dismiss is cancelled
+            dismissAnimation.stop() // automatic dismiss is cancelled
             ContextMenuUtils.copyToClipboard(message)
             notifPaneController.copyButton.setOnAction(null)
             notifPaneController.copyButton.setText("Copied!")
@@ -85,14 +105,16 @@ class NotificationsController extends Logging {
         })
         notifPaneController.closeButton.setOnAction(new EventHandler[ActionEvent] {
           override def handle(event: ActionEvent) = {
-            dismissAnimation.stop
+            dismissAnimation.stop()
             dismissAnimation.setDelay(Duration.ZERO)
-            dismissAnimation.play
+            dismissAnimation.play()
           }
         })
-        showAnimation.play
-        dismissAnimation.setDelay(Duration.seconds(12))
-        dismissAnimation.play
+        showAnimation.play()
+        if (autoDismissed) {
+          dismissAnimation.setDelay(Duration.seconds(12))
+          dismissAnimation.play()
+        }
       }
     })
   }

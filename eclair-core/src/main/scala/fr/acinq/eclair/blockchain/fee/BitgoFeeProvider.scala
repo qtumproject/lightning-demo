@@ -1,3 +1,19 @@
+/*
+ * Copyright 2018 ACINQ SAS
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package fr.acinq.eclair.blockchain.fee
 
 import akka.actor.ActorSystem
@@ -6,12 +22,14 @@ import akka.http.scaladsl.model._
 import akka.http.scaladsl.unmarshalling.Unmarshal
 import akka.stream.ActorMaterializer
 import de.heikoseeberger.akkahttpjson4s.Json4sSupport._
-import org.json4s.JsonAST.{JArray, JInt, JValue}
+import fr.acinq.bitcoin.{BinaryData, Block}
+import fr.acinq.eclair.feerateKbToByte
+import org.json4s.JsonAST.{JInt, JValue}
 import org.json4s.{DefaultFormats, jackson}
 
 import scala.concurrent.{ExecutionContext, Future}
 
-class BitgoFeeProvider(implicit system: ActorSystem, ec: ExecutionContext) extends FeeProvider {
+class BitgoFeeProvider(chainHash: BinaryData)(implicit system: ActorSystem, ec: ExecutionContext) extends FeeProvider {
 
   import BitgoFeeProvider._
 
@@ -20,9 +38,14 @@ class BitgoFeeProvider(implicit system: ActorSystem, ec: ExecutionContext) exten
   implicit val serialization = jackson.Serialization
   implicit val formats = DefaultFormats
 
+  val uri = chainHash match {
+    case Block.LivenetGenesisBlock.hash => Uri("https://www.bitgo.com/api/v2/btc/tx/fee")
+    case _ => Uri("https://test.bitgo.com/api/v2/tbtc/tx/fee")
+  }
+
   override def getFeerates: Future[FeeratesPerByte] =
     for {
-      httpRes <- httpClient.singleRequest(HttpRequest(uri = Uri("https://www.bitgo.com/api/v1/tx/fee"), method = HttpMethods.GET))
+      httpRes <- httpClient.singleRequest(HttpRequest(uri = uri, method = HttpMethods.GET))
       json <- Unmarshal(httpRes).to[JValue]
       feeRanges = parseFeeRanges(json)
     } yield extractFeerates(feeRanges)
@@ -36,7 +59,7 @@ object BitgoFeeProvider {
     val blockTargets = json \ "feeByBlockTarget"
     blockTargets.foldField(Seq.empty[BlockTarget]) {
       // we divide by 1024 because bitgo returns estimates in Satoshi/Kb and we use estimates in Satoshi/Byte
-      case (list, (strBlockTarget, JInt(feePerKb))) => list :+ BlockTarget(strBlockTarget.toInt, feePerKb.longValue() / 1024)
+      case (list, (strBlockTarget, JInt(feePerKb))) => list :+ BlockTarget(strBlockTarget.toInt, feerateKbToByte(feePerKb.longValue()))
     }
   }
 

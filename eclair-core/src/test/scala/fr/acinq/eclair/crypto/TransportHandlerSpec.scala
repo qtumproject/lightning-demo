@@ -1,13 +1,29 @@
+/*
+ * Copyright 2018 ACINQ SAS
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package fr.acinq.eclair.crypto
 
 import java.nio.charset.Charset
 
 import akka.actor.{Actor, ActorLogging, ActorRef, ActorSystem, OneForOneStrategy, Props, Stash, SupervisorStrategy, Terminated}
-import akka.io.Tcp.{Received, Write}
+import akka.io.Tcp
 import akka.testkit.{TestActorRef, TestFSMRef, TestKit, TestProbe}
 import fr.acinq.bitcoin.BinaryData
 import fr.acinq.eclair.crypto.Noise.{Chacha20Poly1305CipherFunctions, CipherState}
-import fr.acinq.eclair.crypto.TransportHandler.{ExtendedCipherState, Listener}
+import fr.acinq.eclair.crypto.TransportHandler.{Encryptor, ExtendedCipherState, Listener}
 import fr.acinq.eclair.wire.LightningMessageCodecs
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
@@ -45,8 +61,8 @@ class TransportHandlerSpec extends TestKit(ActorSystem("test")) with FunSuiteLik
     initiator ! Listener(probe1.ref)
     responder ! Listener(probe2.ref)
 
-    awaitCond(initiator.stateName == TransportHandler.WaitingForCiphertext)
-    awaitCond(responder.stateName == TransportHandler.WaitingForCiphertext)
+    awaitCond(initiator.stateName == TransportHandler.Normal)
+    awaitCond(responder.stateName == TransportHandler.Normal)
 
     initiator.tell(BinaryData("hello".getBytes), probe1.ref)
     probe2.expectMsg(BinaryData("hello".getBytes))
@@ -77,8 +93,8 @@ class TransportHandlerSpec extends TestKit(ActorSystem("test")) with FunSuiteLik
     initiator ! Listener(probe1.ref)
     responder ! Listener(probe2.ref)
 
-    awaitCond(initiator.stateName == TransportHandler.WaitingForCiphertext)
-    awaitCond(responder.stateName == TransportHandler.WaitingForCiphertext)
+    awaitCond(initiator.stateName == TransportHandler.Normal)
+    awaitCond(responder.stateName == TransportHandler.Normal)
 
     initiator.tell(MyMessage("hello"), probe1.ref)
     probe2.expectMsg(MyMessage("hello"))
@@ -107,8 +123,8 @@ class TransportHandlerSpec extends TestKit(ActorSystem("test")) with FunSuiteLik
     initiator ! Listener(probe1.ref)
     responder ! Listener(probe2.ref)
 
-    awaitCond(initiator.stateName == TransportHandler.WaitingForCiphertext)
-    awaitCond(responder.stateName == TransportHandler.WaitingForCiphertext)
+    awaitCond(initiator.stateName == TransportHandler.Normal)
+    awaitCond(responder.stateName == TransportHandler.Normal)
 
     initiator.tell(BinaryData("hello".getBytes), probe1.ref)
     probe2.expectMsg(BinaryData("hello".getBytes))
@@ -164,14 +180,14 @@ class TransportHandlerSpec extends TestKit(ActorSystem("test")) with FunSuiteLik
     val dec = ExtendedCipherState(CipherState(rk, Chacha20Poly1305CipherFunctions), ck)
 
     @tailrec
-    def loop(cs: CipherState, count: Int, acc: Vector[BinaryData] = Vector.empty[BinaryData]): Vector[BinaryData] = {
+    def loop(cs: Encryptor, count: Int, acc: Vector[BinaryData] = Vector.empty[BinaryData]): Vector[BinaryData] = {
       if (count == 0) acc else {
-        val (cs1, ciphertext) = TransportHandler.encrypt(cs, "hello".getBytes())
+        val (cs1, ciphertext) = cs.encrypt("hello".getBytes())
         loop(cs1, count - 1, acc :+ ciphertext)
       }
     }
 
-    val ciphertexts = loop(enc, 1002)
+    val ciphertexts = loop(Encryptor(enc), 1002)
     assert(ciphertexts(0) === BinaryData("0xcf2b30ddf0cf3f80e7c35a6e6730b59fe802473180f396d88a8fb0db8cbcf25d2f214cf9ea1d95"))
     assert(ciphertexts(1) === BinaryData("0x72887022101f0b6753e0c7de21657d35a4cb2a1f5cde2650528bbc8f837d0f0d7ad833b1a256a1"))
     assert(ciphertexts(500) === BinaryData("0x178cb9d7387190fa34db9c2d50027d21793c9bc2d40b1e14dcf30ebeeeb220f48364f7a4c68bf8"))
@@ -196,12 +212,12 @@ object TransportHandlerSpec {
     }
 
     def ready(a: ActorRef, b: ActorRef): Receive = {
-      case Write(data, ack) if sender().path.parent == a.path =>
-        b forward Received(data)
-        sender ! ack
-      case Write(data, ack) if sender().path.parent == b.path =>
-        a forward Received(data)
-        sender ! ack
+      case Tcp.Write(data, ack) if sender().path == a.path =>
+        b forward Tcp.Received(data)
+        if (ack != Tcp.NoAck) sender ! ack
+      case Tcp.Write(data, ack) if sender().path == b.path =>
+        a forward Tcp.Received(data)
+        if (ack != Tcp.NoAck) sender ! ack
       case Terminated(actor) if actor == a || actor == b => context stop self
     }
   }
@@ -219,18 +235,18 @@ object TransportHandlerSpec {
     }
 
     def ready(a: ActorRef, b: ActorRef): Receive = {
-      case Write(data, ack) if sender().path.parent == a.path =>
+      case Tcp.Write(data, ack) if sender().path == a.path =>
         val (chunk1, chunk2) = data.splitAt(data.length / 2)
-        b forward Received(chunk1)
-        sender ! ack
-        b forward Received(chunk2)
-        sender ! ack
-      case Write(data, ack) if sender().path.parent == b.path =>
+        b forward Tcp.Received(chunk1)
+        if (ack != Tcp.NoAck) sender ! ack
+        b forward Tcp.Received(chunk2)
+        if (ack != Tcp.NoAck) sender ! ack
+      case Tcp.Write(data, ack) if sender().path == b.path =>
         val (chunk1, chunk2) = data.splitAt(data.length / 2)
-        a forward Received(chunk1)
-        sender ! ack
-        a forward Received(chunk2)
-        sender ! ack
+        a forward Tcp.Received(chunk1)
+        if (ack != Tcp.NoAck) sender ! ack
+        a forward Tcp.Received(chunk2)
+        if (ack != Tcp.NoAck) sender ! ack
       case Terminated(actor) if actor == a || actor == b => context stop self
     }
   }

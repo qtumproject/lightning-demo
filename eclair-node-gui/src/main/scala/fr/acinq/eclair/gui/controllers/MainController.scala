@@ -1,3 +1,19 @@
+/*
+ * Copyright 2018 ACINQ SAS
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package fr.acinq.eclair.gui.controllers
 
 import java.text.NumberFormat
@@ -26,10 +42,10 @@ import javafx.util.{Callback, Duration}
 
 import com.google.common.net.HostAndPort
 import fr.acinq.bitcoin.{MilliSatoshi, Satoshi}
-import fr.acinq.eclair.NodeParams.{BITCOIND, BITCOINJ, ELECTRUM}
-import fr.acinq.eclair.Setup
+import fr.acinq.eclair.NodeParams.{BITCOIND, ELECTRUM}
+import fr.acinq.eclair.{CoinUtils, Setup}
 import fr.acinq.eclair.gui.stages._
-import fr.acinq.eclair.gui.utils.{CoinUtils, ContextMenuUtils, CopyAction}
+import fr.acinq.eclair.gui.utils.{ContextMenuUtils, CopyAction}
 import fr.acinq.eclair.gui.{FxApp, Handlers}
 import fr.acinq.eclair.payment.{PaymentEvent, PaymentReceived, PaymentRelayed, PaymentSent}
 import fr.acinq.eclair.wire.{ChannelAnnouncement, NodeAnnouncement}
@@ -205,7 +221,7 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
       override def onChanged(c: Change[_ <: ChannelInfo]) = updateTabHeader(networkChannelsTab, "All Channels", networkChannelsList)
     })
     networkChannelsIdColumn.setCellValueFactory(new Callback[CellDataFeatures[ChannelInfo, String], ObservableValue[String]]() {
-      def call(pc: CellDataFeatures[ChannelInfo, String]) = new SimpleStringProperty(pc.getValue.announcement.shortChannelId.toHexString)
+      def call(pc: CellDataFeatures[ChannelInfo, String]) = new SimpleStringProperty(pc.getValue.announcement.shortChannelId.toString)
     })
     networkChannelsNode1Column.setCellValueFactory(new Callback[CellDataFeatures[ChannelInfo, String], ObservableValue[String]]() {
       def call(pc: CellDataFeatures[ChannelInfo, String]) = new SimpleStringProperty(pc.getValue.announcement.nodeId1.toString)
@@ -322,7 +338,7 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
 
   def initInfoFields(setup: Setup) = {
     // init status bar
-    labelNodeId.setText(s"${setup.nodeParams.privateKey.publicKey}")
+    labelNodeId.setText(s"${setup.nodeParams.nodeId}")
     labelAlias.setText(s"${setup.nodeParams.alias}")
     rectRGB.setFill(Color.web(setup.nodeParams.color.toString))
     labelApi.setText(s"${setup.config.getInt("api.port")}")
@@ -331,7 +347,6 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
     val wallet = setup.nodeParams.watcherType match {
       case BITCOIND => "QTUM-core"
       case ELECTRUM => "Electrum"
-      case BITCOINJ => "BitcoinJ"
     }
     bitcoinWallet.setText(wallet)
     bitcoinVersion.setText(s"v${setup.version}")
@@ -339,10 +354,10 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
     bitcoinChain.getStyleClass.add(setup.chain)
 
     val nodeURI_opt = setup.nodeParams.publicAddresses.headOption.map(address => {
-      s"${setup.nodeParams.privateKey.publicKey}@${HostAndPort.fromParts(address.getHostString, address.getPort)}"
+      s"${setup.nodeParams.nodeId}@${HostAndPort.fromParts(address.getHostString, address.getPort)}"
     })
 
-    contextMenu = ContextMenuUtils.buildCopyContext(List(CopyAction("Copy Pubkey", setup.nodeParams.privateKey.publicKey.toString())))
+    contextMenu = ContextMenuUtils.buildCopyContext(List(CopyAction("Copy Pubkey", setup.nodeParams.nodeId.toString())))
     nodeURI_opt.map(nodeURI => {
       val nodeInfoAction = new MenuItem("Node Info")
       nodeInfoAction.setOnAction(new EventHandler[ActionEvent] {
@@ -451,7 +466,7 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
     val copyChannelId = new MenuItem("Copy Channel Id")
     copyChannelId.setOnAction(new EventHandler[ActionEvent] {
       override def handle(event: ActionEvent): Unit = Option(row.getItem) match {
-        case Some(pc) => ContextMenuUtils.copyToClipboard(pc.announcement.shortChannelId.toHexString)
+        case Some(pc) => ContextMenuUtils.copyToClipboard(pc.announcement.shortChannelId.toString)
         case None =>
       }
     })
@@ -474,7 +489,7 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
     row
   }
 
-  @FXML def handleExportDot = {
+  @FXML def handleExportDot() = {
     val fileChooser = new FileChooser
     fileChooser.setTitle("Save as")
     fileChooser.getExtensionFilters.addAll(new ExtensionFilter("DOT File (*.dot)", "*.dot"))
@@ -482,21 +497,21 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
     if (file != null) handlers.exportToDot(file)
   }
 
-  @FXML def handleOpenChannel = {
+  @FXML def handleOpenChannel() = {
     val openChannelStage = new OpenChannelStage(handlers)
     openChannelStage.initOwner(getWindow.orNull)
     positionAtCenter(openChannelStage)
     openChannelStage.show()
   }
 
-  @FXML def handleSendPayment = {
+  @FXML def handleSendPayment() = {
     val sendPaymentStage = new SendPaymentStage(handlers)
     sendPaymentStage.initOwner(getWindow.orNull)
     positionAtCenter(sendPaymentStage)
     sendPaymentStage.show()
   }
 
-  @FXML def handleReceivePayment = {
+  @FXML def handleReceivePayment() = {
     val receiveStage = new ReceivePaymentStage(handlers)
     receiveStage.initOwner(getWindow.orNull)
     positionAtCenter(receiveStage)

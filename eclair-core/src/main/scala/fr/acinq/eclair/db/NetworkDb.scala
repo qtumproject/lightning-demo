@@ -1,7 +1,24 @@
+/*
+ * Copyright 2018 ACINQ SAS
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package fr.acinq.eclair.db
 
 import fr.acinq.bitcoin.{BinaryData, Satoshi}
 import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.eclair.ShortChannelId
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate, NodeAnnouncement}
 
 trait NetworkDb {
@@ -12,7 +29,7 @@ trait NetworkDb {
 
   def removeNode(nodeId: PublicKey)
 
-  def listNodes(): List[NodeAnnouncement]
+  def listNodes(): Seq[NodeAnnouncement]
 
   def addChannel(c: ChannelAnnouncement, txid: BinaryData, capacity: Satoshi)
 
@@ -22,7 +39,7 @@ trait NetworkDb {
     * @param shortChannelId
     * @return
     */
-  def removeChannel(shortChannelId: Long)
+  def removeChannel(shortChannelId: ShortChannelId)
 
   def listChannels(): Map[ChannelAnnouncement, (BinaryData, Satoshi)]
 
@@ -30,6 +47,6 @@ trait NetworkDb {
 
   def updateChannelUpdate(u: ChannelUpdate)
 
-  def listChannelUpdates(): List[ChannelUpdate]
+  def listChannelUpdates(): Seq[ChannelUpdate]
 
 }

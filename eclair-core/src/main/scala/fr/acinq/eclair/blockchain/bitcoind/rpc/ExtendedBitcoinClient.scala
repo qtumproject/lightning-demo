@@ -1,8 +1,25 @@
+/*
+ * Copyright 2018 ACINQ SAS
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package fr.acinq.eclair.blockchain.bitcoind.rpc
 
 import fr.acinq.bitcoin._
+import fr.acinq.eclair.ShortChannelId.coordinates
+import fr.acinq.eclair.TxCoordinates
 import fr.acinq.eclair.blockchain.ValidateResult
-import fr.acinq.eclair.fromShortId
 import fr.acinq.eclair.wire.ChannelAnnouncement
 import org.json4s.JsonAST._
 
@@ -15,13 +32,6 @@ import scala.util.Try
 class ExtendedBitcoinClient(val rpcClient: BitcoinJsonRPCClient) {
 
   implicit val formats = org.json4s.DefaultFormats
-
-  // TODO: this will probably not be needed once segwit is merged into core
-  val protocolVersion = Protocol.PROTOCOL_VERSION
-
-  def tx2Hex(tx: Transaction): String = toHexString(Transaction.write(tx, protocolVersion))
-
-  def hex2tx(hex: String): Transaction = Transaction.read(hex, protocolVersion)
 
   def getTxConfirmations(txId: String)(implicit ec: ExecutionContext): Future[Option[Int]] =
     rpcClient.invoke("getrawtransaction", txId, 1) // we choose verbose output to get the number of confirmations
@@ -125,7 +135,7 @@ class ExtendedBitcoinClient(val rpcClient: BitcoinJsonRPCClient) {
     }
 
   def publishTransaction(tx: Transaction)(implicit ec: ExecutionContext): Future[String] =
-    publishTransaction(tx2Hex(tx))
+    publishTransaction(tx.toString())
 
   /**
     * We need this to compute absolute timeouts expressed in number of blocks (where getBlockCount would be equivalent
@@ -140,35 +150,20 @@ class ExtendedBitcoinClient(val rpcClient: BitcoinJsonRPCClient) {
     }
 
   def validate(c: ChannelAnnouncement)(implicit ec: ExecutionContext): Future[ValidateResult] = {
-    case class TxCoordinate(blockHeight: Int, txIndex: Int, outputIndex: Int)
-
-    val (blockHeight, txIndex, outputIndex) = fromShortId(c.shortChannelId)
-    val coordinates = TxCoordinate(blockHeight, txIndex, outputIndex)
+    val TxCoordinates(blockHeight, txIndex, outputIndex) = coordinates(c.shortChannelId)
 
     for {
-      blockHash: String <- rpcClient.invoke("getblockhash", coordinates.blockHeight).map(_.extractOrElse[String]("00" * 32))
+      blockHash: String <- rpcClient.invoke("getblockhash", blockHeight).map(_.extractOrElse[String]("00" * 32))
       txid: String <- rpcClient.invoke("getblock", blockHash).map {
         case json => Try {
           val JArray(txs) = json \ "tx"
-          txs(coordinates.txIndex).extract[String]
+          txs(txIndex).extract[String]
         } getOrElse ("00" * 32)
       }
       tx <- getRawTransaction(txid)
-      unspent <- isTransactionOutputSpendable(txid, coordinates.outputIndex, includeMempool = true)
+      unspent <- isTransactionOutputSpendable(txid, outputIndex, includeMempool = true)
     } yield ValidateResult(c, Some(Transaction.read(tx)), unspent, None)
 
   } recover { case t: Throwable => ValidateResult(c, None, false, Some(t)) }
 
-  /**
-    *
-    * @return the list of bitcoin addresses for which the wallet has UTXOs
-    */
-  def listUnspentAddresses: Future[Seq[String]] = {
-    import ExecutionContext.Implicits.global
-    implicit val formats = org.json4s.DefaultFormats
-
-    rpcClient.invoke("listunspent").collect {
-      case JArray(values) => values.map(value => (value \ "address").extract[String])
-    }
-  }
 }

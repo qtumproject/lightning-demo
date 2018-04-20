@@ -1,3 +1,19 @@
+/*
+ * Copyright 2018 ACINQ SAS
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package fr.acinq.eclair.payment
 
 import java.math.BigInteger
@@ -6,6 +22,7 @@ import java.nio.ByteOrder
 import fr.acinq.bitcoin.Bech32.Int5
 import fr.acinq.bitcoin.Crypto.{PrivateKey, PublicKey}
 import fr.acinq.bitcoin.{BinaryData, MilliSatoshi, _}
+import fr.acinq.eclair.ShortChannelId
 import fr.acinq.eclair.crypto.BitStream
 import fr.acinq.eclair.crypto.BitStream.Bit
 import fr.acinq.eclair.payment.PaymentRequest.{Amount, ExtraHop, RoutingInfoTag, Timestamp}
@@ -104,15 +121,16 @@ object PaymentRequest {
   // https://github.com/lightningnetwork/lightning-rfc/blob/master/02-peer-protocol.md#adding-an-htlc-update_add_htlc
   val MAX_AMOUNT = MilliSatoshi(2147483648000L)
 
+  val prefixes = Map(
+    Block.RegtestGenesisBlock.hash -> "lnbcrt",
+    Block.TestnetGenesisBlock.hash -> "lntb",
+    Block.LivenetGenesisBlock.hash -> "lnbc")
+
   def apply(chainHash: BinaryData, amount: Option[MilliSatoshi], paymentHash: BinaryData, privateKey: PrivateKey,
             description: String, fallbackAddress: Option[String] = None, expirySeconds: Option[Long] = None,
             extraHops: Seq[Seq[ExtraHop]] = Nil, timestamp: Long = System.currentTimeMillis() / 1000L): PaymentRequest = {
 
-    val prefix = chainHash match {
-      case Block.LivenetGenesisBlock.hash => "lnbc"
-      case Block.TestnetGenesisBlock.hash => "lntb"
-      case Block.RegtestGenesisBlock.hash => "lntb"
-    }
+    val prefix = prefixes(chainHash)
 
     PaymentRequest(
       prefix = prefix,
@@ -207,22 +225,22 @@ object PaymentRequest {
     }
 
     def fromBech32Address(address: String): FallbackAddressTag = {
-      val (prefix, hash) = Bech32.decodeWitnessAddress(address)
-      FallbackAddressTag(prefix, hash)
+      val (_, version, hash) = Bech32.decodeWitnessAddress(address)
+      FallbackAddressTag(version, hash)
     }
   }
 
   /**
     * Extra hop contained in RoutingInfoTag
     *
-    * @param nodeId          start of the channel
-    * @param shortChannelId  channel id
-    * @param feeBaseMsat   node fixed fee
-    * @param feeProportionalMillionths  node proportional fee
-    * @param cltvExpiryDelta node cltv expiry delta
+    * @param nodeId                    start of the channel
+    * @param shortChannelId            channel id
+    * @param feeBaseMsat               node fixed fee
+    * @param feeProportionalMillionths node proportional fee
+    * @param cltvExpiryDelta           node cltv expiry delta
     */
-  case class ExtraHop(nodeId: PublicKey, shortChannelId: Long, feeBaseMsat: Long, feeProportionalMillionths: Long, cltvExpiryDelta: Int) {
-    def pack: Seq[Byte] = nodeId.toBin ++ Protocol.writeUInt64(shortChannelId, ByteOrder.BIG_ENDIAN) ++
+  case class ExtraHop(nodeId: PublicKey, shortChannelId: ShortChannelId, feeBaseMsat: Long, feeProportionalMillionths: Long, cltvExpiryDelta: Int) {
+    def pack: Seq[Byte] = nodeId.toBin ++ Protocol.writeUInt64(shortChannelId.toLong, ByteOrder.BIG_ENDIAN) ++
       Protocol.writeUInt32(feeBaseMsat, ByteOrder.BIG_ENDIAN) ++ Protocol.writeUInt32(feeProportionalMillionths, ByteOrder.BIG_ENDIAN) ++ Protocol.writeUInt16(cltvExpiryDelta, ByteOrder.BIG_ENDIAN)
   }
 
@@ -245,7 +263,7 @@ object PaymentRequest {
       val fee_base_msat = Protocol.uint32(data.slice(33 + 8, 33 + 8 + 4), ByteOrder.BIG_ENDIAN)
       val fee_proportional_millionths = Protocol.uint32(data.slice(33 + 8 + 4, 33 + 8 + 8), ByteOrder.BIG_ENDIAN)
       val cltv = Protocol.uint16(data.slice(33 + 8 + 8, chunkLength), ByteOrder.BIG_ENDIAN)
-      ExtraHop(PublicKey(pubkey), shortChannelId, fee_base_msat, fee_proportional_millionths, cltv)
+      ExtraHop(PublicKey(pubkey), ShortChannelId(shortChannelId), fee_base_msat, fee_proportional_millionths, cltv)
     }
 
     def parseAll(data: Seq[Byte]): Seq[ExtraHop] =
@@ -493,8 +511,8 @@ object PaymentRequest {
     val message: BinaryData = hrp.getBytes ++ stream1.bytes
     val (pub1, pub2) = Crypto.recoverPublicKey((r, s), Crypto.sha256(message))
     val pub = if (recid % 2 != 0) pub2 else pub1
-    val prefix = hrp.take(4)
-    val amount_opt = Amount.decode(hrp.drop(4))
+    val prefix = prefixes.values.find(prefix => hrp.startsWith(prefix)).getOrElse(throw new RuntimeException("unknown prefix"))
+    val amount_opt = Amount.decode(hrp.drop(prefix.length))
     val pr = PaymentRequest(prefix, amount_opt, timestamp, pub, tags.toList, signature)
     val validSig = Crypto.verifySignature(Crypto.sha256(message), (r, s), pub)
     require(validSig, "invalid signature")

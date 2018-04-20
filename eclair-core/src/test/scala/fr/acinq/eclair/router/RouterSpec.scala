@@ -1,3 +1,19 @@
+/*
+ * Copyright 2018 ACINQ SAS
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package fr.acinq.eclair.router
 
 import akka.actor.Status.Failure
@@ -10,8 +26,8 @@ import fr.acinq.eclair.crypto.TransportHandler
 import fr.acinq.eclair.payment.PaymentRequest.ExtraHop
 import fr.acinq.eclair.router.Announcements.makeChannelUpdate
 import fr.acinq.eclair.transactions.Scripts
-import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate, Error, NodeAnnouncement}
-import fr.acinq.eclair.{randomKey, toShortId}
+import fr.acinq.eclair.wire.Error
+import fr.acinq.eclair.{ShortChannelId, randomKey}
 import org.junit.runner.RunWith
 import org.scalatest.junit.JUnitRunner
 
@@ -23,26 +39,26 @@ import scala.concurrent.duration._
 @RunWith(classOf[JUnitRunner])
 class RouterSpec extends BaseRouterSpec {
 
-  ignore("properly announce valid new channels and ignore invalid ones") { case (router, watcher) =>
+  test("properly announce valid new channels and ignore invalid ones") { case (router, watcher) =>
     val eventListener = TestProbe()
     system.eventStream.subscribe(eventListener.ref, classOf[NetworkEvent])
 
-    val channelId_ac = toShortId(420000, 5, 0)
+    val channelId_ac = ShortChannelId(420000, 5, 0)
     val chan_ac = channelAnnouncement(channelId_ac, priv_a, priv_c, priv_funding_a, priv_funding_c)
     val update_ac = makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, c, channelId_ac, cltvExpiryDelta = 7, 0, feeBaseMsat = 766000, feeProportionalMillionths = 10)
     // a-x will not be found
     val priv_x = randomKey
-    val chan_ax = channelAnnouncement(42001, priv_a, priv_x, priv_funding_a, randomKey)
+    val chan_ax = channelAnnouncement(ShortChannelId(42001), priv_a, priv_x, priv_funding_a, randomKey)
     val update_ax = makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, priv_x.publicKey, chan_ax.shortChannelId, cltvExpiryDelta = 7, 0, feeBaseMsat = 766000, feeProportionalMillionths = 10)
     // a-y will have an invalid script
     val priv_y = randomKey
     val priv_funding_y = randomKey
-    val chan_ay = channelAnnouncement(42002, priv_a, priv_y, priv_funding_a, priv_funding_y)
+    val chan_ay = channelAnnouncement(ShortChannelId(42002), priv_a, priv_y, priv_funding_a, priv_funding_y)
     val update_ay = makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, priv_y.publicKey, chan_ay.shortChannelId, cltvExpiryDelta = 7, 0, feeBaseMsat = 766000, feeProportionalMillionths = 10)
     // a-z will be spent
     val priv_z = randomKey
     val priv_funding_z = randomKey
-    val chan_az = channelAnnouncement(42003, priv_a, priv_z, priv_funding_a, priv_funding_z)
+    val chan_az = channelAnnouncement(ShortChannelId(42003), priv_a, priv_z, priv_funding_a, priv_funding_z)
     val update_az = makeChannelUpdate(Block.RegtestGenesisBlock.hash, priv_a, priv_z.publicKey, chan_az.shortChannelId, cltvExpiryDelta = 7, 0, feeBaseMsat = 766000, feeProportionalMillionths = 10)
 
     router ! chan_ac
@@ -94,7 +110,7 @@ class RouterSpec extends BaseRouterSpec {
 
   test("handle bad signature for ChannelAnnouncement") { case (router, _) =>
     val sender = TestProbe()
-    val channelId_ac = toShortId(420000, 5, 0)
+    val channelId_ac = ShortChannelId(420000, 5, 0)
     val chan_ac = channelAnnouncement(channelId_ac, priv_a, priv_c, priv_funding_a, priv_funding_c)
     val buggy_chan_ac = chan_ac.copy(nodeSignature1 = chan_ac.nodeSignature2)
     sender.send(router, buggy_chan_ac)
@@ -152,9 +168,9 @@ class RouterSpec extends BaseRouterSpec {
     val x = randomKey.publicKey
     val y = randomKey.publicKey
     val z = randomKey.publicKey
-    val extraHop_cx = ExtraHop(c, 1, 10, 11, 12)
-    val extraHop_xy = ExtraHop(x, 1, 10, 11, 12)
-    val extraHop_yz = ExtraHop(y, 2, 20, 21, 22)
+    val extraHop_cx = ExtraHop(c, ShortChannelId(1), 10, 11, 12)
+    val extraHop_xy = ExtraHop(x, ShortChannelId(2), 10, 11, 12)
+    val extraHop_yz = ExtraHop(y, ShortChannelId(3), 20, 21, 22)
     sender.send(router, RouteRequest(a, z, assistedRoutes = Seq(extraHop_cx :: extraHop_xy :: extraHop_yz :: Nil)))
     val res = sender.expectMsgType[RouteResponse]
     assert(res.hops.map(_.nodeId).toList === a :: b :: c :: x :: y :: Nil)
@@ -209,11 +225,11 @@ class RouterSpec extends BaseRouterSpec {
 
   test("send routing state") { case (router, _) =>
     val sender = TestProbe()
-    val receiver = TestProbe()
-    sender.send(router, SendRoutingState(receiver.ref))
-    for (_ <- 0 until 4) receiver.expectMsgType[ChannelAnnouncement]
-    for (_ <- 0 until 6) receiver.expectMsgType[NodeAnnouncement]
-    for (_ <- 0 until 8) receiver.expectMsgType[ChannelUpdate]
+    sender.send(router, GetRoutingState)
+    val state = sender.expectMsgType[RoutingState]
+    assert(state.channels.size == 4)
+    assert(state.nodes.size == 6)
+    assert(state.updates.size == 8)
   }
 
 }
