@@ -90,9 +90,16 @@ class GUIUpdater(mainController: MainController) extends Actor with ActorLogging
       val channelPaneController = m(channel)
       runInGuiThread(() => channelPaneController.channelId.setText(s"$channelId"))
 
-    case ChannelStateChanged(channel, _, _, _, currentState, _) if m.contains(channel) =>
+    case ChannelStateChanged(channel, _, _, _, currentState, currentData) if m.contains(channel) =>
       val channelPaneController = m(channel)
       runInGuiThread { () =>
+
+        (currentState, currentData) match {
+          case (WAIT_FOR_FUNDING_CONFIRMED, d: HasCommitments) =>
+            channelPaneController.txId.setText(d.commitments.commitInput.outPoint.txid.toString())
+          case _ => {}
+        }
+
         if (currentState == CLOSING || currentState == CLOSED) {
           channelPaneController.close.setVisible(false)
         } else {
