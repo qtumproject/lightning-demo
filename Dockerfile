@@ -21,7 +21,7 @@ RUN mkdir -p /usr/share/maven /usr/share/maven/ref \
 ENV MAVEN_HOME /usr/share/maven
 ENV MAVEN_CONFIG "$USER_HOME_DIR/.m2"
 
-# Let's fetch eclair dependencies, so that Docker can cache them
+# Let's fetch lightning dependencies, so that Docker can cache them
 # This way we won't have to fetch dependencies again if only the source code changes
 # The easiest way to reliably get dependencies is to build the project with no sources
 WORKDIR /usr/src
@@ -30,8 +30,8 @@ COPY eclair-core/pom.xml eclair-core/pom.xml
 COPY eclair-node/pom.xml eclair-node/pom.xml
 COPY eclair-node-gui/pom.xml eclair-node-gui/pom.xml
 RUN mkdir -p eclair-core/src/main/scala && touch eclair-core/src/main/scala/empty.scala
-# Blank build. We only care about eclair-node, and we use install because eclair-node depends on eclair-core
-RUN mvn install -pl eclair-node -am clean
+# Blank build. We only care about lightning-node, and we use install because lightning-node depends on lightning-core
+RUN mvn install -pl lightning-node -am clean
 
 # Only then do we copy the sources
 COPY . .
@@ -43,8 +43,8 @@ RUN mvn package -pl eclair-node -am -DskipTests -Dgit.commit.id=notag -Dgit.comm
 # We currently use a debian image for runtime because of some jni-related issue with sqlite
 FROM openjdk:8u151-jre-slim
 WORKDIR /app
-# Eclair only needs the eclair-node-*.jar to run
-COPY --from=BUILD /usr/src/eclair-node/target/eclair-node-*.jar .
+# Lightning only needs the lightning-node-*.jar to run
+COPY --from=BUILD /usr/src/eclair-node/target/lightning-node-*.jar .
 RUN ln `ls` eclair-node.jar
 
 ENV ECLAIR_DATADIR=/data

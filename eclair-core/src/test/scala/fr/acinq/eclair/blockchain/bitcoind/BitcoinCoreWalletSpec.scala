@@ -31,7 +31,7 @@ class BitcoinCoreWalletSpec extends TestKit(ActorSystem("test")) with FunSuiteLi
   val INTEGRATION_TMP_DIR = s"${System.getProperty("buildDirectory")}/bitcoinj-${UUID.randomUUID().toString}"
   logger.info(s"using tmp dir: $INTEGRATION_TMP_DIR")
 
-  val PATH_BITCOIND = new File(System.getProperty("buildDirectory"), "bitcoin-0.14.0/bin/bitcoind")
+  val PATH_BITCOIND = new File(System.getProperty("buildDirectory"), "qtum-0.14.16/bin/qtumd")
   val PATH_BITCOIND_DATADIR = new File(INTEGRATION_TMP_DIR, "datadir-bitcoin")
 
   var bitcoind: Process = null
@@ -44,7 +44,7 @@ class BitcoinCoreWalletSpec extends TestKit(ActorSystem("test")) with FunSuiteLi
 
   override def beforeAll(): Unit = {
     Files.createDirectories(PATH_BITCOIND_DATADIR.toPath)
-    Files.copy(classOf[BitcoinCoreWalletSpec].getResourceAsStream("/integration/bitcoin.conf"), new File(PATH_BITCOIND_DATADIR.toString, "bitcoin.conf").toPath)
+    Files.copy(classOf[BitcoinCoreWalletSpec].getResourceAsStream("/integration/qtum.conf"), new File(PATH_BITCOIND_DATADIR.toString, "qtum.conf").toPath)
 
     bitcoind = s"$PATH_BITCOIND -datadir=$PATH_BITCOIND_DATADIR".run()
     bitcoinrpcclient = new BasicBitcoinJsonRPCClient(user = "foo", password = "bar", host = "localhost", port = 28332)
@@ -64,8 +64,8 @@ class BitcoinCoreWalletSpec extends TestKit(ActorSystem("test")) with FunSuiteLi
     sender.send(bitcoincli, BitcoinReq("stop"))
     sender.expectMsgType[JValue]
     bitcoind.exitValue()
-    //    logger.warn(s"starting bitcoin-qt")
-    //    val PATH_BITCOINQT = new File(System.getProperty("buildDirectory"), "bitcoin-0.14.0/bin/bitcoin-qt").toPath
+    //    logger.warn(s"starting qtum-qt")
+    //    val PATH_BITCOINQT = new File(System.getProperty("buildDirectory"), "qtum-0.14.16/bin/qtum-qt").toPath
     //    bitcoind = s"$PATH_BITCOINQT -datadir=$PATH_BITCOIND_DATADIR".run()
   }
 
@@ -77,13 +77,13 @@ class BitcoinCoreWalletSpec extends TestKit(ActorSystem("test")) with FunSuiteLi
       sender.receiveOne(5 second).isInstanceOf[JValue]
     }, max = 30 seconds, interval = 500 millis)
     logger.info(s"generating initial blocks...")
-    sender.send(bitcoincli, BitcoinReq("generate", 500))
+    sender.send(bitcoincli, BitcoinReq("generate", 1000))
     sender.expectMsgType[JValue](30 seconds)
   }
 
   test("create/commit/rollback funding txes") {
     import collection.JavaConversions._
-    val commonConfig = ConfigFactory.parseMap(Map("eclair.chain" -> "regtest", "eclair.spv" -> false, "eclair.server.public-ips.1" -> "localhost", "eclair.bitcoind.port" -> 28333, "eclair.bitcoind.rpcport" -> 28332, "eclair.bitcoind.zmq" -> "tcp://127.0.0.1:28334", "eclair.router-broadcast-interval" -> "2 second", "eclair.auto-reconnect" -> false))
+    val commonConfig = ConfigFactory.parseMap(Map("eclair.chain" -> "regtest", "eclair.spv" -> false, "eclair.server.public-ips.1" -> "localhost", "eclair.bitcoind.rpcuser" -> "foo", "eclair.bitcoind.rpcpassword" -> "bar", "eclair.bitcoind.port" -> 28333, "eclair.bitcoind.rpcport" -> 28332, "eclair.bitcoind.zmq" -> "tcp://127.0.0.1:28334", "eclair.router-broadcast-interval" -> "2 second", "eclair.auto-reconnect" -> false))
     val config = ConfigFactory.load(commonConfig).getConfig("eclair")
     val bitcoinClient = new BasicBitcoinJsonRPCClient(
       user = config.getString("bitcoind.rpcuser"),
@@ -98,7 +98,7 @@ class BitcoinCoreWalletSpec extends TestKit(ActorSystem("test")) with FunSuiteLi
     assert(sender.expectMsgType[Satoshi] > Satoshi(0))
 
     wallet.getFinalAddress.pipeTo(sender.ref)
-    assert(sender.expectMsgType[String].startsWith("2"))
+    assert(sender.expectMsgType[String].startsWith("m"))
 
     val fundingTxes = for (i <- 0 to 3) yield {
       val pubkeyScript = Script.write(Script.pay2wsh(Scripts.multiSig2of2(randomKey.publicKey, randomKey.publicKey)))

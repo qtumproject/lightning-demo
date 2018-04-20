@@ -1,25 +1,20 @@
 ![Eclair Logo](.readme/logo.png)
 
-[![Build Status](https://travis-ci.org/ACINQ/eclair.svg?branch=master)](https://travis-ci.org/ACINQ/eclair)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Gitter chat](https://img.shields.io/badge/chat-on%20gitter-rose.svg)](https://gitter.im/ACINQ/eclair)
 
-**Eclair** (french for Lightning) is a scala implementation of the Lightning Network. It can run with or without a GUI, and a JSON-RPC API is also available.
+**Eclair** is a scala implementation of the Lightning Network. It can run with or without a GUI, and a JSON-RPC API is also available.
 
 This software follows the [Lightning Network Specifications (BOLTs)](https://github.com/lightningnetwork/lightning-rfc). Other implementations include [lightning-c], [lit], and [lnd].
  
  ---
  
- :construction: Both the BOLTs and Eclair itself are a work in progress. Expect things to break/change!
+ :construction: Both the BOLTs and Lightning itself are a work in progress. Expect things to break/change!
  
- :warning: Eclair currently only runs on regtest or testnet.
- 
- :rotating_light: We had reports of Eclair being tested on various segwit-enabled blockchains. Keep in mind that Eclair is still alpha quality software, by using it with actual coins you are putting your funds at risk!
+ :rotating_light: We had reports of Lightning being tested on various segwit-enabled blockchains. Keep in mind that Lightning is still alpha quality software, by using it with actual coins you are putting your funds at risk!
 
 ---
 
 ## Lightning Network Specification Compliance
-Please see the latest [release note](https://github.com/ACINQ/eclair/releases) for detailed information on BOLT compliance.
 
 ## Overview
 
@@ -27,18 +22,15 @@ Please see the latest [release note](https://github.com/ACINQ/eclair/releases) f
 
 ## Installation
 
-:warning: **Those are valid for the most up-to-date, unreleased, version of eclair. Here are the [instructions for Eclair 0.2-alpha8](https://github.com/ACINQ/eclair/blob/v0.2-alpha8/README.md#installation)**.
+:warning: **Those are valid for the most up-to-date, unreleased, version of lightning.
 
-### Configuring Bitcoin Core
+### Configuring QTUM Core
 
-Eclair needs a _synchronized_, _segwit-ready_, **_zeromq-enabled_**, _wallet-enabled_, _non-pruning_, _tx-indexing_ [Bitcoin Core](https://github.com/bitcoin/bitcoin) node. This means that on Windows you will need Bitcoin Core 0.14+.
+Eclair needs a _synchronized_, _segwit-ready_, **_zeromq-enabled_**, _wallet-enabled_, _non-pruning_, _tx-indexing_ [QTUM Core](https://github.com/qtumproject/qtum) node. This means that on Windows you will need QTUM Core 0.14+.
 
-Run bitcoind with the following minimal `bitcoin.conf`:
+Run bitcoind with the following minimal `qtum.conf`:
 ```
-testnet=1
 server=1
-rpcuser=foo
-rpcpassword=bar
 txindex=1
 zmqpubrawblock=tcp://127.0.0.1:29000
 zmqpubrawtx=tcp://127.0.0.1:29000
@@ -46,15 +38,7 @@ zmqpubrawtx=tcp://127.0.0.1:29000
 
 Eclair will use any BTC it finds in the Bitcoin Core wallet to fund any channels you choose to open. Eclair will return BTC from closed channels to this wallet.
 
-On **__testnet__**, you also need to make sure that all your UTXOs are `p2sh-of-p2wpkh`.
-To do this, use the debug console, create a new address with `getnewaddress`, import it as a witness address with `addwitnessaddress`, and
-send all your balance to this witness address. 
-If you need to create and send funds manually, don't forget to create and specify a witness address for the change output (this option is available on the GUI once you set the `Enable coin control features` wallet option).
-
-
-### Installing Eclair
-
-The released binaries can be downloaded [here](https://github.com/ACINQ/eclair/releases).
+### Installing Lightning
 
 #### Windows
 
@@ -76,7 +60,7 @@ java -jar eclair-node-gui-<version>-<commit_id>.jar
 java -jar eclair-node-<version>-<commit_id>.jar
 ```
 
-### Configuring Eclair
+### Configuring Lightning
 
 #### Configuration file
 
@@ -111,7 +95,7 @@ Quotes are not required unless the value contains special characters. Full synta
 
 Some advanced parameters can be changed with java environment variables. Most users won't need this and can skip this section.
 
-:warning: Using separate `datadir` is mandatory if you want to run **several instances of eclair** on the same machine. You will also have to change ports in `eclair.conf` (see above).
+:warning: Using separate `datadir` is mandatory if you want to run **several instances of lightning** on the same machine. You will also have to change ports in `eclair.conf` (see above).
 
 name                  | description                                | default value
 ----------------------|--------------------------------------------|--------------
@@ -121,7 +105,7 @@ eclair.printToConsole | Log to stdout (in addition to eclair.log)  |
 
 For example, to specify a different data directory you would run the following command:
 ```shell
-java -Declair.datadir=/tmp/node1 -jar eclair-node-gui-<version>-<commit_id>.jar
+java -Declair.datadir=/tmp/node1 -jar lightning-capsule.jar
 ```
 
 ## JSON-RPC API
@@ -155,7 +139,7 @@ java -Declair.datadir=/tmp/node1 -jar eclair-node-gui-<version>-<commit_id>.jar
 
 A [Dockerfile](Dockerfile) image is built on each commit on [docker hub](https://hub.docker.com/r/ACINQ/eclair) for running a dockerized eclair-node.
 
-You can use the `JAVA_OPTS` environment variable to set arguments to `eclair-node`.
+You can use the `JAVA_OPTS` environment variable to set arguments to `lightning-node`.
 
 ```
 docker run -ti --rm -e "JAVA_OPTS=-Xmx512m -Declair.api.binding-ip=0.0.0.0 -Declair.node-alias=node-pm -Declair.printToConsole" acinq\eclair
@@ -171,7 +155,6 @@ docker run -ti --rm -v "/path_on_host:/data" -e "JAVA_OPTS=-Declair.printToConso
 ## Resources
 - [1] [The Bitcoin Lightning Network: Scalable Off-Chain Instant Payments](https://lightning.network/lightning-network-paper.pdf) by Joseph Poon and Thaddeus Dryja
 - [2] [Reaching The Ground With Lightning](https://github.com/ElementsProject/lightning/raw/master/doc/deployable-lightning.pdf) by Rusty Russell
-- [3] [Lightning Network Explorer](https://explorer.acinq.co) - Explore testnet LN nodes you can connect to
 
 [Amiko-Pay]: https://github.com/cornwarecjp/amiko-pay
 [lightning-c]: https://github.com/ElementsProject/lightning

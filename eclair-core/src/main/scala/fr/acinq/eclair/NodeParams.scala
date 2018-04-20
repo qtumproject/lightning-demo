@@ -1,7 +1,9 @@
 package fr.acinq.eclair
 
 import java.io.File
-import java.net.InetSocketAddress
+import java.io.BufferedReader
+import java.io.InputStreamReader
+import java.net.{InetSocketAddress, URL}
 import java.nio.file.Files
 import java.sql.DriverManager
 import java.util.concurrent.TimeUnit
@@ -15,6 +17,7 @@ import fr.acinq.eclair.channel.Channel
 import fr.acinq.eclair.db._
 import fr.acinq.eclair.db.sqlite._
 import fr.acinq.eclair.wire.Color
+import grizzled.slf4j.Logging
 
 import scala.collection.JavaConversions._
 import scala.concurrent.duration.FiniteDuration
@@ -61,7 +64,7 @@ case class NodeParams(extendedPrivateKey: ExtendedPrivateKey,
   val nodeId = privateKey.publicKey
 }
 
-object NodeParams {
+object NodeParams extends Logging {
 
   sealed trait WatcherType
 
@@ -70,6 +73,21 @@ object NodeParams {
   object BITCOINJ extends WatcherType
 
   object ELECTRUM extends WatcherType
+
+  def getPublicIp(ourIp: List[String]): List[String] = {
+    var ipList = ourIp
+    if(ourIp.isEmpty()){
+      try {
+        val whatismyip: URL = new URL("http://checkip.amazonaws.com")
+        val in = new BufferedReader(new InputStreamReader(whatismyip.openStream))
+        val ip = in.readLine
+        ipList = ip :: ipList
+      } catch {
+        case t: Throwable => logger.warn("", t)
+      }
+    }
+    ipList
+  }
 
   /**
     * Order of precedence for the configuration parameters:
@@ -105,9 +123,10 @@ object NodeParams {
 
     val chain = config.getString("chain")
     val chainHash = chain match {
-      case "test" => Block.TestnetGenesisBlock.hash
+      case "main" => Block.LivenetGenesisBlock.hash
+      case "testnet" => Block.TestnetGenesisBlock.hash
       case "regtest" => Block.RegtestGenesisBlock.hash
-      case _ => throw new RuntimeException("only regtest and testnet are supported for now")
+      case _ => throw new RuntimeException("wrong name of the network")
     }
 
     val sqlite = DriverManager.getConnection(s"jdbc:sqlite:${new File(datadir, "eclair.sqlite")}")
@@ -141,7 +160,7 @@ object NodeParams {
       privateKey = extendedPrivateKey.privateKey,
       alias = config.getString("node-alias").take(32),
       color = Color(color.data(0), color.data(1), color.data(2)),
-      publicAddresses = config.getStringList("server.public-ips").toList.map(ip => new InetSocketAddress(ip, config.getInt("server.port"))),
+      publicAddresses = getPublicIp(config.getStringList("server.public-ips").toList).map(ip => new InetSocketAddress(ip, config.getInt("server.port"))),
       globalFeatures = BinaryData(config.getString("global-features")),
       localFeatures = BinaryData(config.getString("local-features")),
       dustLimitSatoshis = dustLimitSatoshis,

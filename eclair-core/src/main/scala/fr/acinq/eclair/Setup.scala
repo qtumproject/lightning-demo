@@ -28,6 +28,7 @@ import grizzled.slf4j.Logging
 import scala.collection.JavaConversions._
 import scala.concurrent.duration._
 import scala.concurrent.{Await, ExecutionContext, Future, Promise}
+import scala.io.Source
 
 /**
   * Setup eclair from a datadir.
@@ -41,12 +42,45 @@ import scala.concurrent.{Await, ExecutionContext, Future, Promise}
   */
 class Setup(datadir: File, overrideDefaults: Config = ConfigFactory.empty(), actorSystem: ActorSystem = ActorSystem(), seed_opt: Option[BinaryData] = None) extends Logging {
 
+  def getCookieDir():String = {
+    val cookiepath = chain match {
+      case "main" => bitdir + "/.cookie"
+      case "testnet" => bitdir + "/testnet3/.cookie"
+      case "regtest" => bitdir + "/regtest/.cookie"
+    }
+    cookiepath
+  }
+
+  def getRPCUserPass(): (String, String) = {
+    var user = config.getString("bitcoind.rpcuser")
+    var pass = config.getString("bitcoind.rpcpassword")
+    if(user == "" && pass == ""){                           //from directory
+      if(bitdir == "") //for console
+        bitdir = System.getProperty("user.home") + "/.qtum"
+      val cookiepath = getCookieDir
+      val cookie = Source.fromFile(cookiepath, "UTF-8").mkString.split(":")
+      user = cookie(0)
+      pass = cookie(1)
+    }
+    (user, pass)
+  }
+
   logger.info(s"hello!")
   logger.info(s"version=${getClass.getPackage.getImplementationVersion} commit=${getClass.getPackage.getSpecificationVersion}")
 
   val config: Config = NodeParams.loadConfiguration(datadir, overrideDefaults)
   val nodeParams: NodeParams = NodeParams.makeNodeParams(datadir, config, seed_opt)
   val chain: String = config.getString("chain")
+  var bitdir = config.getString("bitcoind.bitdir")
+  val (user, pass) = getRPCUserPass
+  var version:String = "0."
+  var rpcport = config.getInt("bitcoind.rpcport")
+  if (rpcport == 0) {
+    rpcport = chain match {
+      case "main" => 3889
+      case _ => 13889
+    }
+  }
 
   // early checks
   DBCompatChecker.checkDBCompatibility(nodeParams)
@@ -69,10 +103,10 @@ class Setup(datadir: File, overrideDefaults: Config = ConfigFactory.empty(), act
   val bitcoin = nodeParams.watcherType match {
     case BITCOIND =>
       val bitcoinClient = new ExtendedBitcoinClient(new BatchingBitcoinJsonRPCClient(new BasicBitcoinJsonRPCClient(
-        user = config.getString("bitcoind.rpcuser"),
-        password = config.getString("bitcoind.rpcpassword"),
+        user = user,
+        password = pass,
         host = config.getString("bitcoind.host"),
-        port = config.getInt("bitcoind.rpcport"))))
+        port = rpcport)))
       val future = for {
         json <- bitcoinClient.rpcClient.invoke("getblockchaininfo").recover { case _ => throw BitcoinRPCConnectionException }
         // Make sure wallet support is enabled in bitcoind.
@@ -85,11 +119,10 @@ class Setup(datadir: File, overrideDefaults: Config = ConfigFactory.empty(), act
       // blocking sanity checks
       val (progress, chainHash, bitcoinVersion, unspentAddresses) = Await.result(future, 10 seconds)
       assert(chainHash == nodeParams.chainHash, s"chainHash mismatch (conf=${nodeParams.chainHash} != bitcoind=$chainHash)")
-      if (chainHash == Block.TestnetGenesisBlock.hash) {
-        assert(unspentAddresses.forall(isSegwitAddress), "In testnet mode, make sure that all your UTXOs are p2sh-of-p2wpkh (check out our README for more details)")
-      }
-      assert(progress > 0.99, "bitcoind should be synchronized")
-      // TODO: add a check on bitcoin version?
+      //assert(progress > 0.99, "bitcoind should be synchronized")
+
+      version = version + bitcoinVersion.substring(0, 2) + "."
+      version = version + bitcoinVersion.substring(2, 4)
 
       Bitcoind(bitcoinClient)
     case BITCOINJ =>
@@ -103,7 +136,7 @@ class Setup(datadir: File, overrideDefaults: Config = ConfigFactory.empty(), act
     case ELECTRUM =>
       logger.warn("EXPERIMENTAL ELECTRUM MODE ENABLED!!!")
       val addressesFile = chain match {
-        case "test" => "/electrum/servers_testnet.json"
+        case "testnet" => "/electrum/servers_testnet.json"
         case "regtest" => "/electrum/servers_regtest.json"
       }
       val stream = classOf[Setup].getResourceAsStream(addressesFile)

@@ -31,7 +31,7 @@ class ExtendedBitcoinClientSpec extends TestKit(ActorSystem("test")) with FunSui
   val INTEGRATION_TMP_DIR = s"${System.getProperty("buildDirectory")}/integration-${UUID.randomUUID().toString}"
   logger.info(s"using tmp dir: $INTEGRATION_TMP_DIR")
 
-  val PATH_BITCOIND = new File(System.getProperty("buildDirectory"), "bitcoin-0.14.0/bin/bitcoind")
+  val PATH_BITCOIND = new File(System.getProperty("buildDirectory"), "qtum-0.14.16/bin/qtumd")
   val PATH_BITCOIND_DATADIR = new File(INTEGRATION_TMP_DIR, "datadir-bitcoin")
 
   var bitcoind: Process = null
@@ -45,7 +45,7 @@ class ExtendedBitcoinClientSpec extends TestKit(ActorSystem("test")) with FunSui
 
   override def beforeAll(): Unit = {
     Files.createDirectories(PATH_BITCOIND_DATADIR.toPath)
-    Files.copy(classOf[IntegrationSpec].getResourceAsStream("/integration/bitcoin.conf"), new File(PATH_BITCOIND_DATADIR.toString, "bitcoin.conf").toPath)
+    Files.copy(classOf[IntegrationSpec].getResourceAsStream("/integration/qtum.conf"), new File(PATH_BITCOIND_DATADIR.toString, "qtum.conf").toPath)
 
     bitcoind = s"$PATH_BITCOIND -datadir=$PATH_BITCOIND_DATADIR".run()
     bitcoinrpcclient = new BasicBitcoinJsonRPCClient(user = "foo", password = "bar", host = "localhost", port = 28332)
@@ -75,15 +75,15 @@ class ExtendedBitcoinClientSpec extends TestKit(ActorSystem("test")) with FunSui
       sender.receiveOne(5 second).isInstanceOf[JValue]
     }, max = 30 seconds, interval = 500 millis)
     logger.info(s"generating initial blocks...")
-    sender.send(bitcoincli, BitcoinReq("generate", 500))
+    sender.send(bitcoincli, BitcoinReq("generate", 1000))
     sender.expectMsgType[JValue](20 seconds)
 
     val future = for {
       count <- client.getBlockCount
-      _ = assert(count == 500)
+      _ = assert(count == 1000)
       unspentAddresses <- client.listUnspentAddresses
       // coinbase txs need 100 confirmations to be spendable
-      _ = assert(unspentAddresses.length == 500 - 100)
+      _ = assert(unspentAddresses.length == 500)
       // generate and import a new private key
       priv = PrivateKey("01" * 32)
       wif = Base58Check.encode(Base58.Prefix.SecretKeyTestnet, priv.toBin)

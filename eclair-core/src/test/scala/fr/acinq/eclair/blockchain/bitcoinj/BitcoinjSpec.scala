@@ -36,7 +36,7 @@ class BitcoinjSpec extends TestKit(ActorSystem("test")) with FunSuiteLike with B
   val INTEGRATION_TMP_DIR = s"${System.getProperty("buildDirectory")}/bitcoinj-${UUID.randomUUID().toString}"
   logger.info(s"using tmp dir: $INTEGRATION_TMP_DIR")
 
-  val PATH_BITCOIND = new File(System.getProperty("buildDirectory"), "bitcoin-0.14.0/bin/bitcoind")
+  val PATH_BITCOIND = new File(System.getProperty("buildDirectory"), "qtum-0.14.16/bin/qtumd")
   val PATH_BITCOIND_DATADIR = new File(INTEGRATION_TMP_DIR, "datadir-bitcoin")
 
   var bitcoind: Process = null
@@ -70,7 +70,7 @@ class BitcoinjSpec extends TestKit(ActorSystem("test")) with FunSuiteLike with B
     sender.expectMsgType[JValue]
     //bitcoind.destroy()
     //    logger.warn(s"starting bitcoin-qt")
-    //    val PATH_BITCOINQT = new File(System.getProperty("buildDirectory"), "bitcoin-0.14.0/bin/bitcoin-qt").toPath
+    //    val PATH_BITCOINQT = new File(System.getProperty("buildDirectory"), "qtum-0.14.16/bin/qtum-qt").toPath
     //    bitcoind = s"$PATH_BITCOINQT -datadir=$PATH_BITCOIND_DATADIR".run()
   }
 

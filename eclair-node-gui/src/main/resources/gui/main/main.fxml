@@ -228,6 +228,7 @@
                         <HBox alignment="CENTER_RIGHT" HBox.hgrow="SOMETIMES" minWidth="195.0">
                             <children>
                                 <Label fx:id="bitcoinWallet" text="N/A" textAlignment="RIGHT" textOverrun="CLIP"/>
+                                <Label fx:id="bitcoinVersion" text="N/A" textOverrun="CLIP"/>
                                 <Label fx:id="bitcoinChain" styleClass="chain" text="(N/A)" textOverrun="CLIP"/>
                             </children>
                         </HBox>
@@ -274,11 +275,6 @@
                             <items>
                                 <MenuItem mnemonicParsing="false" onAction="#handleExportDot"
                                           text="Export Graph to .dot"/>
-                            </items>
-                        </Menu>
-                        <Menu mnemonicParsing="false" text="Help">
-                            <items>
-                                <MenuItem mnemonicParsing="false" onAction="#handleOpenAbout" text="About Eclair..."/>
                             </items>
                         </Menu>
                     </menus>

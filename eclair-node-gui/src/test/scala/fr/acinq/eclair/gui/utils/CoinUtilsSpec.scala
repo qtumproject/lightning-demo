@@ -83,9 +83,9 @@ class CoinUtilsSpec  extends FunSuite {
     assert(CoinUtils.rawAmountInUnit(Btc(0.00011111222), MSatUnit) == BigDecimal(11111222L))
   }
 
-  test("Format any BtcAmount to a String with a given unit") {
-    assert(CoinUtils.formatAmountInUnit(MilliSatoshi(123456789), BtcUnit, withUnit = true) == "0.00123456789 BTC"
-    || CoinUtils.formatAmountInUnit(MilliSatoshi(123456789), BtcUnit, withUnit = true) == "0,00123456789 BTC")
+  test("Format any QtumAmount to a String with a given unit") {
+    assert(CoinUtils.formatAmountInUnit(MilliSatoshi(123456789), BtcUnit, withUnit = true) == "0.00123456789 QTUM"
+    || CoinUtils.formatAmountInUnit(MilliSatoshi(123456789), BtcUnit, withUnit = true) == "0,00123456789 QTUM")
   }
 }
 

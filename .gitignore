@@ -12,6 +12,11 @@ src_managed/
 project/boot/
 project/plugins/project/
 
+.project
+.settings/
+.vscode/
+.classpath
+
 # mvn specific
 dependency-reduced-pom.xml
 

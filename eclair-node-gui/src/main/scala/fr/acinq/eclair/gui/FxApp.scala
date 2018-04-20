@@ -45,7 +45,7 @@ class FxApp extends Application with Logging {
       notifyPreloader(new AppNotification(InfoAppNotification, "Make sure that Bitcoin Core is up and running and ZMQ parameters are correct."))
     case e@IncompatibleDBException =>
       notifyPreloader(new ErrorNotification("Setup", "Breaking changes!", e))
-      notifyPreloader(new AppNotification(InfoAppNotification, "Eclair is still in alpha, and under heavy development. Last update was not backward compatible."))
+      notifyPreloader(new AppNotification(InfoAppNotification, "Lightning is still in alpha, and under heavy development. Last update was not backward compatible."))
       notifyPreloader(new AppNotification(InfoAppNotification, "Please reset your datadir."))
     case e@IncompatibleNetworkDBException =>
       notifyPreloader(new ErrorNotification("Setup", "Unreadable network database!", e))
@@ -90,7 +90,7 @@ class FxApp extends Application with Logging {
               Platform.runLater(new Runnable {
                 override def run(): Unit = {
                   val scene = new Scene(mainRoot)
-                  primaryStage.setTitle("Eclair")
+                  primaryStage.setTitle("Lightning")
                   primaryStage.setMinWidth(600)
                   primaryStage.setWidth(960)
                   primaryStage.setMinHeight(400)

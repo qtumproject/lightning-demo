@@ -43,8 +43,7 @@
                         <configuration>
                             <appClass>fr.acinq.eclair.JavafxBoot</appClass>
                             <type>fat</type>
-                            <fileName>${project.name}-${project.version}</fileName>
-                            <fileDesc>-${git.commit.id.abbrev}</fileDesc>
+                            <fileName>lightning</fileName>
                         </configuration>
                     </execution>
                 </executions>
@@ -80,7 +79,7 @@
                         <configuration>
                             <vendor>ACINQ</vendor>
                             <needShortcut>true</needShortcut>
-                            <appName>Eclair</appName>
+                            <appName>Lightning</appName>
                             <nativeReleaseVersion>${project.version}</nativeReleaseVersion>
                             <skipNativeVersionNumberSanitizing>true</skipNativeVersionNumberSanitizing>
                             <nativeOutputDir>${project.build.directory}/jfx/installer</nativeOutputDir>

@@ -57,9 +57,10 @@ class SendPaymentController(val handlers: Handlers, val stage: Stage) extends Lo
           case Success(pr) => setUIFields(pr)
           case Failure(f) =>
             paymentRequestError.setText("Could not read this payment request")
-            descriptionLabel.setText("")
-            nodeIdField.setText("")
-            paymentHashField.setText("")
+            descriptionLabel.setText("N/A")
+            nodeIdField.setText("N/A")
+            paymentHashField.setText("N/A")
+            amountField.setText("N/A")
         }
       }
     })

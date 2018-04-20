@@ -47,10 +47,11 @@ class Handlers(fKit: Future[Kit])(implicit ec: ExecutionContext = ExecutionConte
           kit.switchboard ? o
         case None => Future.successful(0) // nothing to do
       }
-    } yield conn) onFailure {
-      case t: Throwable =>
-        logger.error("Could not open channel ", t)
-        notification("Connection failed", nodeUri.address.toString, NOTIFICATION_ERROR)
+    } yield conn) onComplete {
+        case Success(ground) => notification("Connection success", nodeUri.address.toString, NOTIFICATION_SUCCESS)
+        case Failure(ex) =>
+          logger.error("Could not open channel ", ex)
+          notification("Connection failed", nodeUri.address.toString, NOTIFICATION_ERROR)
     }
   }
 
@@ -114,9 +115,9 @@ class Handlers(fKit: Future[Kit])(implicit ec: ExecutionContext = ExecutionConte
     * @param title            Title of the notification
     * @param message          main message of the notification, will not wrap
     * @param notificationType type of the message, default to NONE
-    * @param showAppName      true if you want the notification title to be preceded by "Eclair - ". True by default
+    * @param showAppName      true if you want the notification title to be preceded by "Lightning - ". True by default
     */
   def notification(title: String, message: String, notificationType: NotificationType = NOTIFICATION_NONE, showAppName: Boolean = true) = {
-    notifsController.foreach(_.addNotification(if (showAppName) s"Eclair - $title" else title, message, notificationType))
+    notifsController.foreach(_.addNotification(if (showAppName) s"Lightning - $title" else title, message, notificationType))
   }
 }

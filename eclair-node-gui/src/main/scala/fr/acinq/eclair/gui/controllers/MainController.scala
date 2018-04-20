@@ -69,6 +69,7 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
   @FXML var labelApi: Label = _
   @FXML var labelServer: Label = _
   @FXML var bitcoinWallet: Label = _
+  @FXML var bitcoinVersion: Label = _
   @FXML var bitcoinChain: Label = _
 
   // channels tab elements
@@ -328,11 +329,12 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
     labelServer.setText(s"${setup.config.getInt("server.port")}")
 
     val wallet = setup.nodeParams.watcherType match {
-      case BITCOIND => "Bitcoin-core"
+      case BITCOIND => "QTUM-core"
       case ELECTRUM => "Electrum"
       case BITCOINJ => "BitcoinJ"
     }
     bitcoinWallet.setText(wallet)
+    bitcoinVersion.setText(s"v${setup.version}")
     bitcoinChain.setText(s"${setup.chain.toUpperCase()}")
     bitcoinChain.getStyleClass.add(setup.chain)
 

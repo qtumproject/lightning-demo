@@ -17,8 +17,8 @@ class SendPaymentStage(handlers: Handlers) extends Stage() with Logging {
   initStyle(StageStyle.DECORATED)
   getIcons().add(new Image("/gui/commons/images/eclair-square.png", false))
   setTitle("Send a Payment Request")
-  setMinWidth(450)
-  setWidth(450)
+  setMinWidth(550)
+  setWidth(550)
   setMinHeight(550)
   setHeight(550)
 

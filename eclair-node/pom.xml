@@ -43,8 +43,7 @@
                         <configuration>
                             <appClass>fr.acinq.eclair.Boot</appClass>
                             <type>fat</type>
-                            <fileName>${project.name}-${project.version}</fileName>
-                            <fileDesc>-${git.commit.id.abbrev}</fileDesc>
+                            <fileName>lightning</fileName>
                         </configuration>
                     </execution>
                 </executions>

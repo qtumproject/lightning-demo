@@ -49,7 +49,7 @@
         <Label fx:id="amountFieldLabel" text="Amount" GridPane.halignment="RIGHT" GridPane.valignment="BASELINE" GridPane.rowIndex="6"/>
         <VBox GridPane.columnIndex="1" GridPane.rowIndex="6">
             <children>
-                <TextField fx:id="amountField"/>
+                <TextField fx:id="amountField" editable="false" focusTraversable="false" layoutX="148.0" layoutY="288.0" styleClass="description-text" text="N/A" GridPane.columnIndex="1" GridPane.rowIndex="6"/>
                 <Label fx:id="amountFieldError" mouseTransparent="true" styleClass="text-error"/>
             </children>
         </VBox>

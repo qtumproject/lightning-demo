@@ -294,16 +294,16 @@ object ElectrumClient {
 
   case class Header(block_height: Long, version: Long, prev_block_hash: BinaryData, merkle_root: BinaryData, timestamp: Long, bits: Long, nonce: Long) {
     lazy val block_hash: BinaryData = {
-      val blockHeader = BlockHeader(version, prev_block_hash.reverse, merkle_root.reverse, timestamp, bits, nonce)
+      val blockHeader = BlockHeaderElectrum(version, prev_block_hash.reverse, merkle_root.reverse, timestamp, bits, nonce)
       blockHeader.hash.reverse
     }
   }
 
   object Header {
-    def makeHeader(height: Long, header: BlockHeader) = ElectrumClient.Header(0, header.version, header.hashPreviousBlock, header.hashMerkleRoot, header.time, header.bits, header.nonce)
+    def makeHeader(height: Long, header: BlockHeaderElectrum) = ElectrumClient.Header(0, header.version, header.hashPreviousBlock, header.hashMerkleRoot, header.time, header.bits, header.nonce)
 
-    val RegtestGenesisHeader = makeHeader(0, Block.RegtestGenesisBlock.header)
-    val TestnetGenesisHeader = makeHeader(0, Block.TestnetGenesisBlock.header)
+    val RegtestGenesisHeader = makeHeader(0, BlockElectrum.RegtestGenesisBlock.header)
+    val TestnetGenesisHeader = makeHeader(0, BlockElectrum.TestnetGenesisBlock.header)
   }
 
   case class TransactionHistory(history: Seq[TransactionHistoryItem]) extends Response

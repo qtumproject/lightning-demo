@@ -102,16 +102,16 @@ case class PaymentRequest(prefix: String, amount: Option[MilliSatoshi], timestam
 object PaymentRequest {
 
   // https://github.com/lightningnetwork/lightning-rfc/blob/master/02-peer-protocol.md#adding-an-htlc-update_add_htlc
-  val MAX_AMOUNT = MilliSatoshi(4294967296L)
+  val MAX_AMOUNT = MilliSatoshi(2147483648000L)
 
   def apply(chainHash: BinaryData, amount: Option[MilliSatoshi], paymentHash: BinaryData, privateKey: PrivateKey,
             description: String, fallbackAddress: Option[String] = None, expirySeconds: Option[Long] = None,
             extraHops: Seq[Seq[ExtraHop]] = Nil, timestamp: Long = System.currentTimeMillis() / 1000L): PaymentRequest = {
 
     val prefix = chainHash match {
-      case Block.RegtestGenesisBlock.hash => "lntb"
-      case Block.TestnetGenesisBlock.hash => "lntb"
       case Block.LivenetGenesisBlock.hash => "lnbc"
+      case Block.TestnetGenesisBlock.hash => "lntb"
+      case Block.RegtestGenesisBlock.hash => "lntb"
     }
 
     PaymentRequest(

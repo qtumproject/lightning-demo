@@ -43,7 +43,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
   val INTEGRATION_TMP_DIR = s"${System.getProperty("buildDirectory")}/integration-${UUID.randomUUID().toString}"
   logger.info(s"using tmp dir: $INTEGRATION_TMP_DIR")
 
-  val PATH_BITCOIND = new File(System.getProperty("buildDirectory"), "bitcoin-0.14.0/bin/bitcoind")
+  val PATH_BITCOIND = new File(System.getProperty("buildDirectory"), "qtum-0.14.16/bin/qtumd")
   val PATH_BITCOIND_DATADIR = new File(INTEGRATION_TMP_DIR, "datadir-bitcoin")
 
   var bitcoind: Process = null
@@ -57,7 +57,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
 
   override def beforeAll(): Unit = {
     Files.createDirectories(PATH_BITCOIND_DATADIR.toPath)
-    Files.copy(classOf[IntegrationSpec].getResourceAsStream("/integration/bitcoin.conf"), new File(PATH_BITCOIND_DATADIR.toString, "bitcoin.conf").toPath)
+    Files.copy(classOf[IntegrationSpec].getResourceAsStream("/integration/qtum.conf"), new File(PATH_BITCOIND_DATADIR.toString, "qtum.conf").toPath)
 
     bitcoind = s"$PATH_BITCOIND -datadir=$PATH_BITCOIND_DATADIR".run()
     bitcoinrpcclient = new BasicBitcoinJsonRPCClient(user = "foo", password = "bar", host = "localhost", port = 28332)
@@ -82,7 +82,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
         setup.system.terminate()
     }
     //    logger.warn(s"starting bitcoin-qt")
-    //    val PATH_BITCOINQT = new File(System.getProperty("buildDirectory"), "bitcoin-0.14.0/bin/bitcoin-qt").toPath
+    //    val PATH_BITCOINQT = new File(System.getProperty("buildDirectory"), "qtum-0.14.16/bin/qtum-qt").toPath
     //    bitcoind = s"$PATH_BITCOINQT -datadir=$PATH_BITCOIND_DATADIR".run()
   }
 
@@ -94,7 +94,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
       sender.receiveOne(5 second).isInstanceOf[JValue]
     }, max = 30 seconds, interval = 500 millis)
     logger.info(s"generating initial blocks...")
-    sender.send(bitcoincli, BitcoinReq("generate", 500))
+    sender.send(bitcoincli, BitcoinReq("generate", 1000))
     sender.expectMsgType[JValue](30 seconds)
   }
 
@@ -118,7 +118,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
 
   test("starting eclair nodes") {
     import collection.JavaConversions._
-    val commonConfig = ConfigFactory.parseMap(Map("eclair.chain" -> "regtest", "eclair.spv" -> false, "eclair.server.public-ips.1" -> "localhost", "eclair.bitcoind.port" -> 28333, "eclair.bitcoind.rpcport" -> 28332, "eclair.bitcoind.zmq" -> "tcp://127.0.0.1:28334", "eclair.router-broadcast-interval" -> "2 second", "eclair.auto-reconnect" -> false))
+    val commonConfig = ConfigFactory.parseMap(Map("eclair.chain" -> "regtest", "eclair.spv" -> false, "eclair.server.public-ips.1" -> "localhost", "eclair.bitcoind.rpcuser" -> "foo", "eclair.bitcoind.rpcpassword" -> "bar", "eclair.bitcoind.port" -> 28333, "eclair.bitcoind.rpcport" -> 28332, "eclair.bitcoind.zmq" -> "tcp://127.0.0.1:28334", "eclair.router-broadcast-interval" -> "2 second", "eclair.auto-reconnect" -> false))
     instantiateEclairNode("A", ConfigFactory.parseMap(Map("eclair.node-alias" -> "A", "eclair.delay-blocks" -> 130, "eclair.server.port" -> 29730, "eclair.api.port" -> 28080, "eclair.channel-flags" -> 0)).withFallback(commonConfig)) // A's channels are private
     instantiateEclairNode("B", ConfigFactory.parseMap(Map("eclair.node-alias" -> "B", "eclair.delay-blocks" -> 131, "eclair.server.port" -> 29731, "eclair.api.port" -> 28081)).withFallback(commonConfig))
     instantiateEclairNode("C", ConfigFactory.parseMap(Map("eclair.node-alias" -> "C", "eclair.delay-blocks" -> 132, "eclair.server.port" -> 29732, "eclair.api.port" -> 28082)).withFallback(commonConfig))
@@ -379,7 +379,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
     val preimage: BinaryData = "42" * 32
     val paymentHash = Crypto.sha256(preimage)
     // A sends a payment to F
-    val paymentReq = SendPayment(100000000L, paymentHash, nodes("F1").nodeParams.privateKey.publicKey, maxAttempts = 1)
+    val paymentReq = SendPayment(300000000L, paymentHash, nodes("F1").nodeParams.privateKey.publicKey, maxAttempts = 1)
     val paymentSender = TestProbe()
     paymentSender.send(nodes("A").paymentInitiator, paymentReq)
     // F gets the htlc
@@ -448,7 +448,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
     val preimage: BinaryData = "42" * 32
     val paymentHash = Crypto.sha256(preimage)
     // A sends a payment to F
-    val paymentReq = SendPayment(100000000L, paymentHash, nodes("F2").nodeParams.privateKey.publicKey, maxAttempts = 1)
+    val paymentReq = SendPayment(300000000L, paymentHash, nodes("F2").nodeParams.privateKey.publicKey, maxAttempts = 1)
     val paymentSender = TestProbe()
     paymentSender.send(nodes("A").paymentInitiator, paymentReq)
     // F gets the htlc
@@ -513,7 +513,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
     val preimage: BinaryData = "42" * 32
     val paymentHash = Crypto.sha256(preimage)
     // A sends a payment to F
-    val paymentReq = SendPayment(100000000L, paymentHash, nodes("F3").nodeParams.privateKey.publicKey, maxAttempts = 1)
+    val paymentReq = SendPayment(300000000L, paymentHash, nodes("F3").nodeParams.privateKey.publicKey, maxAttempts = 1)
     val paymentSender = TestProbe()
     paymentSender.send(nodes("A").paymentInitiator, paymentReq)
     // F gets the htlc
@@ -565,7 +565,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
     val preimage: BinaryData = "42" * 32
     val paymentHash = Crypto.sha256(preimage)
     // A sends a payment to F
-    val paymentReq = SendPayment(100000000L, paymentHash, nodes("F4").nodeParams.privateKey.publicKey, maxAttempts = 1)
+    val paymentReq = SendPayment(300000000L, paymentHash, nodes("F4").nodeParams.privateKey.publicKey, maxAttempts = 1)
     val paymentSender = TestProbe()
     paymentSender.send(nodes("A").paymentInitiator, paymentReq)
     // F gets the htlc

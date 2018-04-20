@@ -82,7 +82,7 @@ class PaymentRequestSpec extends FunSuite {
     assert(PaymentRequest.write(pr.sign(priv)) == ref)
   }
 
-  test("The same, on testnet, with a fallback address mk2QpYatsKicvFVuTAQLBryyccRXMUaGHP") {
+  test("The same, on testnet, with a fallback address qN4qgXGVFwtWH9kgfwQCYzS4H9k1mGouDK") {
     val ref = "lntb20m1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsfpp3x9et2e20v6pu37c5d9vax37wxq72un98k6vcx9fz94w0qf237cm2rqv9pmn5lnexfvf5579slr4zq3u8kmczecytdx0xg9rwzngp7e6guwqpqlhssu04sucpnz4axcv2dstmknqq6jsk2l"
     val pr = PaymentRequest.read(ref)
     assert(pr.prefix == "lntb")
@@ -91,12 +91,12 @@ class PaymentRequestSpec extends FunSuite {
     assert(pr.timestamp == 1496314658L)
     assert(pr.nodeId == PublicKey(BinaryData("03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad")))
     assert(pr.description == Right(Crypto.sha256("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes)))
-    assert(pr.fallbackAddress === Some("mk2QpYatsKicvFVuTAQLBryyccRXMUaGHP"))
+    assert(pr.fallbackAddress === Some("qN4qgXGVFwtWH9kgfwQCYzS4H9k1mGouDK"))
     assert(pr.tags.size == 3)
     assert(PaymentRequest.write(pr.sign(priv)) == ref)
   }
 
-  test("On mainnet, with fallback address 1RustyRX2oai4EYYDpQGWvEL62BBGqN9T with extra routing info to go via nodes 029e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255 then 039e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255") {
+  test("On mainnet, with fallback address QM2tzCG8hVgQ9CKZxZ8tPnhrqLxtSXou6y with extra routing info to go via nodes 029e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255 then 039e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255") {
     val ref = "lnbc20m1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsfpp3qjmp7lwpagxun9pygexvgpjdc4jdj85fr9yq20q82gphp2nflc7jtzrcazrra7wwgzxqc8u7754cdlpfrmccae92qgzqvzq2ps8pqqqqqqpqqqqq9qqqvpeuqafqxu92d8lr6fvg0r5gv0heeeqgcrqlnm6jhphu9y00rrhy4grqszsvpcgpy9qqqqqqgqqqqq7qqzqj9n4evl6mr5aj9f58zp6fyjzup6ywn3x6sk8akg5v4tgn2q8g4fhx05wf6juaxu9760yp46454gpg5mtzgerlzezqcqvjnhjh8z3g2qqdhhwkj"
     val pr = PaymentRequest.read(ref)
     assert(pr.prefix == "lnbc")
@@ -105,7 +105,7 @@ class PaymentRequestSpec extends FunSuite {
     assert(pr.timestamp == 1496314658L)
     assert(pr.nodeId == PublicKey(BinaryData("03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad")))
     assert(pr.description == Right(Crypto.sha256("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes)))
-    assert(pr.fallbackAddress === Some("1RustyRX2oai4EYYDpQGWvEL62BBGqN9T"))
+    assert(pr.fallbackAddress === Some("QM2tzCG8hVgQ9CKZxZ8tPnhrqLxtSXou6y"))
     assert(pr.routingInfo === List(List(
       ExtraHop(PublicKey("029e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255"), 72623859790382856L, 1, 20, 3),
       ExtraHop(PublicKey("039e03a901b85534ff1e92c43c74431f7ce72046060fcf7a95c37e148f78c77255"), 217304205466536202L, 2, 30, 4)
@@ -117,7 +117,7 @@ class PaymentRequestSpec extends FunSuite {
   }
 
 
-  test("On mainnet, with fallback (p2sh) address 3EktnHQD7RiAE6uzMj2ZifT9YgRrkSgzQX") {
+  test("On mainnet, with fallback (p2sh) address MLy36ApB4YZb2cBtTc1uYJhYsP2JkYokaf") {
     val ref = "lnbc20m1pvjluezpp5qqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqqqsyqcyq5rqwzqfqypqhp58yjmdan79s6qqdhdzgynm4zwqd5d7xmw5fk98klysy043l2ahrqsfppj3a24vwu6r8ejrss3axul8rxldph2q7z9kk822r8plup77n9yq5ep2dfpcydrjwzxs0la84v3tfw43t3vqhek7f05m6uf8lmfkjn7zv7enn76sq65d8u9lxav2pl6x3xnc2ww3lqpagnh0u"
     val pr = PaymentRequest.read(ref)
     assert(pr.prefix == "lnbc")
@@ -126,7 +126,7 @@ class PaymentRequestSpec extends FunSuite {
     assert(pr.timestamp == 1496314658L)
     assert(pr.nodeId == PublicKey(BinaryData("03e7156ae33b0a208d0744199163177e909e80176e55d97a2f221ede0f934dd9ad")))
     assert(pr.description == Right(Crypto.sha256("One piece of chocolate cake, one icecream cone, one pickle, one slice of swiss cheese, one slice of salami, one lollypop, one piece of cherry pie, one sausage, one cupcake, and one slice of watermelon".getBytes)))
-    assert(pr.fallbackAddress === Some("3EktnHQD7RiAE6uzMj2ZifT9YgRrkSgzQX"))
+    assert(pr.fallbackAddress === Some("MLy36ApB4YZb2cBtTc1uYJhYsP2JkYokaf"))
     assert(pr.tags.size == 3)
     assert(PaymentRequest.write(pr.sign(priv)) == ref)
   }

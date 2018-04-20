@@ -28,7 +28,6 @@ class OpenChannelController(val handlers: Handlers, val stage: Stage) extends Lo
   @FXML var fundingSatoshisError: Label = _
   @FXML var pushMsatField: TextField = _
   @FXML var pushMsatError: Label = _
-  @FXML var publicChannel: CheckBox = _
   @FXML var unit: ComboBox[String] = _
   @FXML var button: Button = _
 
@@ -72,7 +71,6 @@ class OpenChannelController(val handlers: Handlers, val stage: Stage) extends Lo
     Try(NodeURI.parse(host.getText)) match {
       case Success(nodeUri) if simpleConnection.isSelected =>
         handlers.open(nodeUri, None)
-        stage.close
       case Success(nodeUri) => Try(CoinUtils.convertStringAmountToSat(fundingSatoshis.getText, unit.getValue)) match {
         case Success(capacitySat) if capacitySat.amount <= 0 => fundingSatoshisError.setText("Capacity must be greater than 0")
         case Success(capacitySat) if capacitySat.amount >= Channel.MAX_FUNDING_SATOSHIS =>
@@ -84,9 +82,9 @@ class OpenChannelController(val handlers: Handlers, val stage: Stage) extends Lo
               stage close()
             case _ => Try(MilliSatoshi(pushMsatField.getText.toLong)) match {
               case Success(pushMsat) if pushMsat.amount > satoshi2millisatoshi(capacitySat).amount =>
-                pushMsatError.setText("Push must be less or equal to capacity")
+                pushMsatError.setText("Push must be less or equal to capacity") 
               case Success(pushMsat) =>
-                val channelFlags = if (publicChannel.isSelected) ChannelFlags.AnnounceChannel else ChannelFlags.Empty
+                val channelFlags = ChannelFlags.AnnounceChannel
                 handlers.open(nodeUri, Some(Peer.OpenChannel(nodeUri.nodeId, capacitySat, pushMsat, Some(channelFlags))))
                 stage close()
               case Failure(t) =>
