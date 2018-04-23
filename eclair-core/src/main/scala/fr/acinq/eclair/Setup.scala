@@ -138,8 +138,8 @@ class Setup(datadir: File, overrideDefaults: Config = ConfigFactory.empty(), act
       // blocking sanity checks
       val (progress, chainHash, bitcoinVersion, unspentAddresses) = Await.result(future, 10 seconds)
       //assert(bitcoinVersion.startsWith("16"), "Eclair requires Bitcoin Core 0.16.0 or higher")
-      assert(chainHash == nodeParams.chainHash, s"chainHash mismatch (conf=${nodeParams.chainHash} != bitcoind=$chainHash)")
-      assert(progress > 0.99, "bitcoind should be synchronized")
+      assert(chainHash == nodeParams.chainHash, s"chainHash mismatch (conf=${nodeParams.chainHash} != qtumd=$chainHash)")
+      assert(progress > 0.99, "qtumd should be synchronized")
 
       version = version + bitcoinVersion.substring(0, 2) + "."
       version = version + bitcoinVersion.substring(2, 4)

@@ -73,6 +73,7 @@ class Handlers(fKit: Future[Kit])(implicit ec: ExecutionContext = ExecutionConte
                 notification("Channel creation failed", t.getMessage, NOTIFICATION_ERROR)
             }
           case None =>
+            notification("Connection up", s"connection to $nodeUri successful", NOTIFICATION_SUCCESS)
         }
       case Failure(t) =>
         logger.error(s"could not create connection to $nodeUri ", t)
