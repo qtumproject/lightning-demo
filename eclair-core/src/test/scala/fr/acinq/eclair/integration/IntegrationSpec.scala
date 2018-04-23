@@ -688,10 +688,10 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
     val currentBlockCount = sender.expectMsgType[JValue](10 seconds).extract[Long]
     awaitCond(Globals.blockCount.get() == currentBlockCount, max = 20 seconds, interval = 1 second)
     // first we send 3 mBTC to F so that it has a balance
-    val amountMsat = MilliSatoshi(300000000L)
+    val amountMsat = MilliSatoshi(900000000L)
     sender.send(paymentHandlerF, ReceivePayment(Some(amountMsat), "1 coffee"))
     val pr = sender.expectMsgType[PaymentRequest]
-    val sendReq = SendPayment(300000000L, pr.paymentHash, pr.nodeId)
+    val sendReq = SendPayment(900000000L, pr.paymentHash, pr.nodeId)
     sender.send(nodes("A").paymentInitiator, sendReq)
     // we forward the htlc to the payment handler
     forwardHandlerF.expectMsgType[UpdateAddHtlc]
@@ -707,19 +707,19 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with FunSuiteLike wit
       sender.send(paymentInitiator, sendReq)
     }
     val buffer = TestProbe()
-    send(100000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
+    send(300000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
     forwardHandlerF.expectMsgType[UpdateAddHtlc]
     forwardHandlerF.forward(buffer.ref)
     sigListener.expectMsgType[ChannelSignatureReceived]
-    send(110000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
+    send(310000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
     forwardHandlerF.expectMsgType[UpdateAddHtlc]
     forwardHandlerF.forward(buffer.ref)
     sigListener.expectMsgType[ChannelSignatureReceived]
-    send(120000000, paymentHandlerC, nodes("F5").paymentInitiator)
+    send(320000000, paymentHandlerC, nodes("F5").paymentInitiator)
     forwardHandlerC.expectMsgType[UpdateAddHtlc]
     forwardHandlerC.forward(buffer.ref)
     sigListener.expectMsgType[ChannelSignatureReceived]
-    send(130000000, paymentHandlerC, nodes("F5").paymentInitiator)
+    send(330000000, paymentHandlerC, nodes("F5").paymentInitiator)
     forwardHandlerC.expectMsgType[UpdateAddHtlc]
     forwardHandlerC.forward(buffer.ref)
     val commitmentsF = sigListener.expectMsgType[ChannelSignatureReceived].commitments
