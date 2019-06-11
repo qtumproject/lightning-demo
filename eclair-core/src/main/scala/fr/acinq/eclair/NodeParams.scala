@@ -37,6 +37,7 @@ import scodec.bits.ByteVector
 
 import scala.collection.JavaConversions._
 import scala.concurrent.duration.FiniteDuration
+import scala.io.Source
 
 /**
   * Created by PM on 26/02/2017.
@@ -114,6 +115,19 @@ object NodeParams {
         seed
     }
   }
+
+  def getRPCUserPass(datadir: File, config: Config): (String, String) = {
+    var user = config.getString("bitcoind.rpcuser")
+    var pass = config.getString("bitcoind.rpcpassword")
+    if(user == "" && pass == "") {                           //from directory
+      val cookieFile = new File(datadir, ".cookie")
+      val cookie = Source.fromFile(cookieFile, "UTF-8").mkString.split(":")
+      user = cookie(0)
+      pass = cookie(1)
+    }
+    (user, pass)
+  }
+
 
   def makeChainHash(chain: String): ByteVector32 = {
     chain match {

@@ -77,29 +77,6 @@ class Setup(datadir: File,
   implicit val ec = ExecutionContext.Implicits.global
   implicit val sttpBackend = OkHttpFutureBackend()
 
-  def getCookieDir():String = {
-    val cookiepath = chain match {
-      case "main" => bitdir + "/.cookie"
-      case "testnet" => bitdir + "/testnet3/.cookie"
-      case "regtest" => bitdir + "/regtest/.cookie"
-    }
-    cookiepath
-  }
-
-  def getRPCUserPass(): (String, String) = {
-    var user = config.getString("bitcoind.rpcuser")
-    var pass = config.getString("bitcoind.rpcpassword")
-    if(user == "" && pass == ""){                           //from directory
-      if(bitdir == "") //for console
-        bitdir = System.getProperty("user.home") + "/.qtum"
-      val cookiepath = getCookieDir
-      val cookie = Source.fromFile(cookiepath, "UTF-8").mkString.split(":")
-      user = cookie(0)
-      pass = cookie(1)
-    }
-    (user, pass)
-  }
-
   logger.info(s"hello!")
   logger.info(s"version=${getClass.getPackage.getImplementationVersion} commit=${getClass.getPackage.getSpecificationVersion}")
   logger.info(s"datadir=${datadir.getCanonicalPath}")
@@ -113,6 +90,7 @@ class Setup(datadir: File,
   val chain = config.getString("chain")
   val chaindir = new File(datadir, chain)
   val keyManager = new LocalKeyManager(seed, NodeParams.makeChainHash(chain))
+  val (user, pass) = NodeParams.getRPCUserPass(datadir, config)
 
   val database = db match {
     case Some(d) => d
@@ -136,8 +114,8 @@ class Setup(datadir: File,
   val bitcoin = nodeParams.watcherType match {
     case BITCOIND =>
       val bitcoinClient = new BasicBitcoinJsonRPCClient(
-        user = config.getString("bitcoind.rpcuser"),
-        password = config.getString("bitcoind.rpcpassword"),
+        user = user,
+        password = pass,
         host = config.getString("bitcoind.host"),
         port = config.getInt("bitcoind.rpcport"))
       implicit val timeout = Timeout(30 seconds)
