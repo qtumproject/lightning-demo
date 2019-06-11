@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,34 +16,35 @@
 
 package fr.acinq.eclair.db.sqlite
 
-import java.net.InetSocketAddress
 import java.sql.Connection
 
 import fr.acinq.bitcoin.Crypto
 import fr.acinq.bitcoin.Crypto.PublicKey
 import fr.acinq.eclair.db.PeersDb
 import fr.acinq.eclair.db.sqlite.SqliteUtils.{getVersion, using}
-import fr.acinq.eclair.wire.LightningMessageCodecs.socketaddress
+import fr.acinq.eclair.wire._
 import scodec.bits.BitVector
 
 class SqlitePeersDb(sqlite: Connection) extends PeersDb {
+
+import SqliteUtils.ExtendedResultSet._
 
   val DB_NAME = "peers"
   val CURRENT_VERSION = 1
 
   using(sqlite.createStatement()) { statement =>
-    require(getVersion(statement, DB_NAME, CURRENT_VERSION) == CURRENT_VERSION) // there is only one version currently deployed
+    require(getVersion(statement, DB_NAME, CURRENT_VERSION) == CURRENT_VERSION, s"incompatible version of $DB_NAME DB found") // there is only one version currently deployed
     statement.executeUpdate("CREATE TABLE IF NOT EXISTS peers (node_id BLOB NOT NULL PRIMARY KEY, data BLOB NOT NULL)")
   }
 
-  override def addOrUpdatePeer(nodeId: Crypto.PublicKey, address: InetSocketAddress): Unit = {
-    val data = socketaddress.encode(address).require.toByteArray
+  override def addOrUpdatePeer(nodeId: Crypto.PublicKey, nodeaddress: NodeAddress): Unit = {
+    val data = LightningMessageCodecs.nodeaddress.encode(nodeaddress).require.toByteArray
     using(sqlite.prepareStatement("UPDATE peers SET data=? WHERE node_id=?")) { update =>
       update.setBytes(1, data)
-      update.setBytes(2, nodeId.toBin)
+      update.setBytes(2, nodeId.toBin.toArray)
       if (update.executeUpdate() == 0) {
         using(sqlite.prepareStatement("INSERT INTO peers VALUES (?, ?)")) { statement =>
-          statement.setBytes(1, nodeId.toBin)
+          statement.setBytes(1, nodeId.toBin.toArray)
           statement.setBytes(2, data)
           statement.executeUpdate()
         }
@@ -53,19 +54,23 @@ class SqlitePeersDb(sqlite: Connection) extends PeersDb {
 
   override def removePeer(nodeId: Crypto.PublicKey): Unit = {
     using(sqlite.prepareStatement("DELETE FROM peers WHERE node_id=?")) { statement =>
-      statement.setBytes(1, nodeId.toBin)
+      statement.setBytes(1, nodeId.toBin.toArray)
       statement.executeUpdate()
     }
   }
 
-  override def listPeers(): Map[PublicKey, InetSocketAddress] = {
+  override def listPeers(): Map[PublicKey, NodeAddress] = {
     using(sqlite.createStatement()) { statement =>
       val rs = statement.executeQuery("SELECT node_id, data FROM peers")
-      var m: Map[PublicKey, InetSocketAddress] = Map()
+      var m: Map[PublicKey, NodeAddress] = Map()
       while (rs.next()) {
-        m += (PublicKey(rs.getBytes("node_id")) -> socketaddress.decode(BitVector(rs.getBytes("data"))).require.value)
+        val nodeid = PublicKey(rs.getByteVector("node_id"))
+        val nodeaddress = LightningMessageCodecs.nodeaddress.decode(BitVector(rs.getBytes("data"))).require.value
+        m += (nodeid -> nodeaddress)
       }
       m
     }
   }
+
+  override def close(): Unit = sqlite.close()
 }

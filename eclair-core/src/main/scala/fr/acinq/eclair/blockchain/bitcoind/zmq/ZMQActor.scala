@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,62 +16,71 @@
 
 package fr.acinq.eclair.blockchain.bitcoind.zmq
 
+import akka.Done
 import akka.actor.{Actor, ActorLogging}
 import fr.acinq.bitcoin.{Block, Transaction}
 import fr.acinq.eclair.blockchain.{NewBlock, NewTransaction}
 import org.zeromq.ZMQ.Event
-import org.zeromq.{ZContext, ZMQ, ZMsg}
+import org.zeromq.{SocketType, ZContext, ZMQ, ZMsg}
 
-import scala.concurrent.Promise
+import scala.annotation.tailrec
 import scala.concurrent.duration._
+import scala.concurrent.{ExecutionContext, Promise}
 import scala.util.Try
 
 /**
   * Created by PM on 04/04/2017.
   */
-class ZMQActor(address: String, connected: Option[Promise[Boolean]] = None) extends Actor with ActorLogging {
+class ZMQActor(address: String, connected: Option[Promise[Done]] = None) extends Actor with ActorLogging {
 
   import ZMQActor._
 
   val ctx = new ZContext
 
-  val subscriber = ctx.createSocket(ZMQ.SUB)
+  val subscriber = ctx.createSocket(SocketType.SUB)
   subscriber.monitor("inproc://events", ZMQ.EVENT_CONNECTED | ZMQ.EVENT_DISCONNECTED)
   subscriber.connect(address)
   subscriber.subscribe("rawblock".getBytes(ZMQ.CHARSET))
   subscriber.subscribe("rawtx".getBytes(ZMQ.CHARSET))
 
-  val monitor = ctx.createSocket(ZMQ.PAIR)
+  val monitor = ctx.createSocket(SocketType.PAIR)
   monitor.connect("inproc://events")
 
-  import scala.concurrent.ExecutionContext.Implicits.global
+  implicit val ec: ExecutionContext = context.system.dispatcher
 
   // we check messages in a non-blocking manner with an interval, making sure to retrieve all messages before waiting again
-  def checkEvent: Unit = Option(Event.recv(monitor, ZMQ.DONTWAIT)) match {
+  @tailrec
+  final def checkEvent: Unit = Option(Event.recv(monitor, ZMQ.DONTWAIT)) match {
     case Some(event) =>
       self ! event
       checkEvent
-    case None =>
-      context.system.scheduler.scheduleOnce(1 second)(checkEvent)
+    case None => ()
   }
 
-  def checkMsg: Unit = Option(ZMsg.recvMsg(subscriber, ZMQ.DONTWAIT)) match {
+  @tailrec
+  final def checkMsg: Unit = Option(ZMsg.recvMsg(subscriber, ZMQ.DONTWAIT)) match {
     case Some(msg) =>
       self ! msg
       checkMsg
-    case None =>
-      context.system.scheduler.scheduleOnce(1 second)(checkMsg)
+    case None => ()
   }
 
-  checkEvent
-  checkMsg
+  self ! 'checkEvent
+  self ! 'checkMsg
 
   override def receive: Receive = {
+    case 'checkEvent =>
+      checkEvent
+      context.system.scheduler.scheduleOnce(1 second, self ,'checkEvent)
+
+    case 'checkMsg =>
+      checkMsg
+      context.system.scheduler.scheduleOnce(1 second, self, 'checkMsg)
 
     case event: Event => event.getEvent match {
       case ZMQ.EVENT_CONNECTED =>
         log.info(s"connected to ${event.getAddress}")
-        Try(connected.map(_.success(true)))
+        Try(connected.map(_.success(Done)))
         context.system.eventStream.publish(ZMQConnected)
       case ZMQ.EVENT_DISCONNECTED =>
         log.warning(s"disconnected from ${event.getAddress}")

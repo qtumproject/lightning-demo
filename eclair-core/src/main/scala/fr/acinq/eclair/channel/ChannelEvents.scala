@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,9 +17,11 @@
 package fr.acinq.eclair.channel
 
 import akka.actor.ActorRef
-import fr.acinq.bitcoin.BinaryData
 import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.{ByteVector32, Satoshi, Transaction}
 import fr.acinq.eclair.ShortChannelId
+import fr.acinq.eclair.channel.Channel.ChannelError
+import fr.acinq.eclair.channel.Helpers.Closing.ClosingType
 import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 
 /**
@@ -28,20 +30,33 @@ import fr.acinq.eclair.wire.{ChannelAnnouncement, ChannelUpdate}
 
 trait ChannelEvent
 
-case class ChannelCreated(channel: ActorRef, peer: ActorRef, remoteNodeId: PublicKey, isFunder: Boolean, temporaryChannelId: BinaryData) extends ChannelEvent
+case class ChannelCreated(channel: ActorRef, peer: ActorRef, remoteNodeId: PublicKey, isFunder: Boolean, temporaryChannelId: ByteVector32) extends ChannelEvent
 
-case class ChannelRestored(channel: ActorRef, peer: ActorRef, remoteNodeId: PublicKey, isFunder: Boolean, channelId: BinaryData, currentData: HasCommitments) extends ChannelEvent
+case class ChannelRestored(channel: ActorRef, peer: ActorRef, remoteNodeId: PublicKey, isFunder: Boolean, channelId: ByteVector32, currentData: HasCommitments) extends ChannelEvent
 
-case class ChannelIdAssigned(channel: ActorRef, remoteNodeId: PublicKey, temporaryChannelId: BinaryData, channelId: BinaryData) extends ChannelEvent
+case class ChannelIdAssigned(channel: ActorRef, remoteNodeId: PublicKey, temporaryChannelId: ByteVector32, channelId: ByteVector32) extends ChannelEvent
 
-case class ShortChannelIdAssigned(channel: ActorRef, channelId: BinaryData, shortChannelId: ShortChannelId) extends ChannelEvent
+case class ShortChannelIdAssigned(channel: ActorRef, channelId: ByteVector32, shortChannelId: ShortChannelId) extends ChannelEvent
 
-case class LocalChannelUpdate(channel: ActorRef, channelId: BinaryData, shortChannelId: ShortChannelId, remoteNodeId: PublicKey, channelAnnouncement_opt: Option[ChannelAnnouncement], channelUpdate: ChannelUpdate) extends ChannelEvent
+case class LocalChannelUpdate(channel: ActorRef, channelId: ByteVector32, shortChannelId: ShortChannelId, remoteNodeId: PublicKey, channelAnnouncement_opt: Option[ChannelAnnouncement], channelUpdate: ChannelUpdate, commitments: Commitments) extends ChannelEvent
 
-case class LocalChannelDown(channel: ActorRef, channelId: BinaryData, shortChannelId: ShortChannelId, remoteNodeId: PublicKey) extends ChannelEvent
+case class LocalChannelDown(channel: ActorRef, channelId: ByteVector32, shortChannelId: ShortChannelId, remoteNodeId: PublicKey) extends ChannelEvent
 
 case class ChannelStateChanged(channel: ActorRef, peer: ActorRef, remoteNodeId: PublicKey, previousState: State, currentState: State, currentData: Data) extends ChannelEvent
 
 case class ChannelSignatureSent(channel: ActorRef, commitments: Commitments) extends ChannelEvent
 
 case class ChannelSignatureReceived(channel: ActorRef, commitments: Commitments) extends ChannelEvent
+
+case class ChannelErrorOccured(channel: ActorRef, channelId: ByteVector32, remoteNodeId: PublicKey, data: Data, error: ChannelError, isFatal: Boolean) extends ChannelEvent
+
+case class NetworkFeePaid(channel: ActorRef, remoteNodeId: PublicKey, channelId: ByteVector32, tx: Transaction, fee: Satoshi, txType: String) extends ChannelEvent
+
+// NB: this event is only sent when the channel is available
+case class AvailableBalanceChanged(channel: ActorRef, channelId: ByteVector32, shortChannelId: ShortChannelId, localBalanceMsat: Long, commitments: Commitments) extends ChannelEvent
+
+case class ChannelPersisted(channel: ActorRef, remoteNodeId: PublicKey, channelId: ByteVector32, data: Data) extends ChannelEvent
+
+case class LocalCommitConfirmed(channel: ActorRef, remoteNodeId: PublicKey, channelId: ByteVector32, refundAtBlock: Long) extends ChannelEvent
+
+case class ChannelClosed(channel: ActorRef, channelId: ByteVector32, closingType: ClosingType, commitments: Commitments)

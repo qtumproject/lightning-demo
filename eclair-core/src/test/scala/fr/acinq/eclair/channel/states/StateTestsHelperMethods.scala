@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,8 +16,11 @@
 
 package fr.acinq.eclair.channel.states
 
+import java.util.UUID
+
+import akka.actor.Actor
 import akka.testkit.{TestFSMRef, TestKitBase, TestProbe}
-import fr.acinq.bitcoin.{BinaryData, Crypto}
+import fr.acinq.bitcoin.{ByteVector32, Crypto}
 import fr.acinq.eclair.TestConstants.{Alice, Bob}
 import fr.acinq.eclair.blockchain._
 import fr.acinq.eclair.blockchain.fee.FeeratesPerKw
@@ -26,61 +29,56 @@ import fr.acinq.eclair.crypto.Sphinx
 import fr.acinq.eclair.payment.PaymentLifecycle
 import fr.acinq.eclair.router.Hop
 import fr.acinq.eclair.wire._
-import fr.acinq.eclair.{Globals, NodeParams, TestConstants}
-
-import scala.util.Random
+import fr.acinq.eclair.{Globals, NodeParams, TestConstants, randomBytes32}
+import scodec.bits.ByteVector
 
 /**
   * Created by PM on 23/08/2016.
   */
 trait StateTestsHelperMethods extends TestKitBase {
 
-  def defaultOnion: BinaryData = "00" * Sphinx.PacketLength
+  def defaultOnion: ByteVector = ByteVector.fill(Sphinx.PacketLength)(0)
 
-  case class Setup(alice: TestFSMRef[State, Data, Channel],
+  case class SetupFixture(alice: TestFSMRef[State, Data, Channel],
                    bob: TestFSMRef[State, Data, Channel],
                    alice2bob: TestProbe,
                    bob2alice: TestProbe,
                    alice2blockchain: TestProbe,
                    bob2blockchain: TestProbe,
                    router: TestProbe,
-                   relayer: TestProbe)
+                   relayerA: TestProbe,
+                   relayerB: TestProbe,
+                   channelUpdateListener: TestProbe)
 
-  def init(nodeParamsA: NodeParams = TestConstants.Alice.nodeParams, nodeParamsB: NodeParams = TestConstants.Bob.nodeParams): Setup = {
+  def init(nodeParamsA: NodeParams = TestConstants.Alice.nodeParams, nodeParamsB: NodeParams = TestConstants.Bob.nodeParams, wallet: EclairWallet = new TestWallet): SetupFixture = {
     Globals.feeratesPerKw.set(FeeratesPerKw.single(TestConstants.feeratePerKw))
     val alice2bob = TestProbe()
     val bob2alice = TestProbe()
     val alice2blockchain = TestProbe()
     val bob2blockchain = TestProbe()
-    val relayer = TestProbe()
-    system.eventStream.subscribe(relayer.ref, classOf[LocalChannelUpdate])
-    system.eventStream.subscribe(relayer.ref, classOf[LocalChannelDown])
-    // hacky... publish a fake update and wait till we've received it
-//    val fakeUpdate = LocalChannelUpdate(probe.ref, BinaryData("00" * 32), 0, PrivateKey("01" * 32).publicKey, None, ChannelUpdate(LightningMessageCodecsSpec.randomSignature, Block.RegtestGenesisBlock.hash, 1, 2, BinaryData("0202"), 3, 4, 5, 6))
-//    system.eventStream.publish(fakeUpdate)
-//    probe.expectMsg(fakeUpdate)
+    val relayerA = TestProbe()
+    val relayerB = TestProbe()
+    val channelUpdateListener = TestProbe()
+    system.eventStream.subscribe(channelUpdateListener.ref, classOf[LocalChannelUpdate])
+    system.eventStream.subscribe(channelUpdateListener.ref, classOf[LocalChannelDown])
     val router = TestProbe()
-    val wallet = new TestWallet
-    val alice: TestFSMRef[State, Data, Channel] = TestFSMRef(new Channel(nodeParamsA, wallet, Bob.nodeParams.nodeId, alice2blockchain.ref, router.ref, relayer.ref))
-    val bob: TestFSMRef[State, Data, Channel] = TestFSMRef(new Channel(nodeParamsB, wallet, Alice.nodeParams.nodeId, bob2blockchain.ref, router.ref, relayer.ref))
-    Setup(alice, bob, alice2bob, bob2alice, alice2blockchain, bob2blockchain, router, relayer)
+    val alice: TestFSMRef[State, Data, Channel] = TestFSMRef(new Channel(nodeParamsA, wallet, Bob.nodeParams.nodeId, alice2blockchain.ref, router.ref, relayerA.ref))
+    val bob: TestFSMRef[State, Data, Channel] = TestFSMRef(new Channel(nodeParamsB, wallet, Alice.nodeParams.nodeId, bob2blockchain.ref, router.ref, relayerB.ref))
+    SetupFixture(alice, bob, alice2bob, bob2alice, alice2blockchain, bob2blockchain, router, relayerA, relayerB, channelUpdateListener)
   }
 
-  def reachNormal(alice: TestFSMRef[State, Data, Channel],
-                  bob: TestFSMRef[State, Data, Channel],
-                  alice2bob: TestProbe,
-                  bob2alice: TestProbe,
-                  alice2blockchain: TestProbe,
-                  bob2blockchain: TestProbe,
-                  relayer: TestProbe,
+  def reachNormal(setup: SetupFixture,
                   tags: Set[String] = Set.empty): Unit = {
+    import setup._
     val channelFlags = if (tags.contains("channels_public")) ChannelFlags.AnnounceChannel else ChannelFlags.Empty
+    val pushMsat = if (tags.contains("no_push_msat")) 0 else TestConstants.pushMsat
     val (aliceParams, bobParams) = (Alice.channelParams, Bob.channelParams)
     val aliceInit = Init(aliceParams.globalFeatures, aliceParams.localFeatures)
     val bobInit = Init(bobParams.globalFeatures, bobParams.localFeatures)
-    // no announcements
-    alice ! INPUT_INIT_FUNDER("00" * 32, TestConstants.fundingSatoshis, TestConstants.pushMsat, TestConstants.feeratePerKw, TestConstants.feeratePerKw, aliceParams, alice2bob.ref, bobInit, channelFlags)
-    bob ! INPUT_INIT_FUNDEE("00" * 32, bobParams, bob2alice.ref, aliceInit)
+    // reset global feerates (they may have been changed by previous tests)
+    Globals.feeratesPerKw.set(FeeratesPerKw.single(TestConstants.feeratePerKw))
+    alice ! INPUT_INIT_FUNDER(ByteVector32.Zeroes, TestConstants.fundingSatoshis, pushMsat, TestConstants.feeratePerKw, TestConstants.feeratePerKw, aliceParams, alice2bob.ref, bobInit, channelFlags)
+    bob ! INPUT_INIT_FUNDEE(ByteVector32.Zeroes, bobParams, bob2alice.ref, aliceInit)
     alice2bob.expectMsgType[OpenChannel]
     alice2bob.forward(bob)
     bob2alice.expectMsgType[AcceptChannel]
@@ -105,19 +103,19 @@ trait StateTestsHelperMethods extends TestKitBase {
     bob2blockchain.expectMsgType[WatchConfirmed] // deeply buried
     awaitCond(alice.stateName == NORMAL)
     awaitCond(bob.stateName == NORMAL)
+    assert(bob.stateData.asInstanceOf[DATA_NORMAL].commitments.availableBalanceForSendMsat == pushMsat - TestConstants.Alice.channelParams.channelReserveSatoshis * 1000)
     // x2 because alice and bob share the same relayer
-    relayer.expectMsgType[LocalChannelUpdate]
-    relayer.expectMsgType[LocalChannelUpdate]
+    channelUpdateListener.expectMsgType[LocalChannelUpdate]
+    channelUpdateListener.expectMsgType[LocalChannelUpdate]
   }
 
-  def addHtlc(amountMsat: Int, s: TestFSMRef[State, Data, Channel], r: TestFSMRef[State, Data, Channel], s2r: TestProbe, r2s: TestProbe): (BinaryData, UpdateAddHtlc) = {
-    val R: BinaryData = Array.fill[Byte](32)(0)
-    Random.nextBytes(R)
-    val H: BinaryData = Crypto.sha256(R)
+  def addHtlc(amountMsat: Int, s: TestFSMRef[State, Data, Channel], r: TestFSMRef[State, Data, Channel], s2r: TestProbe, r2s: TestProbe): (ByteVector32, UpdateAddHtlc) = {
+    val R: ByteVector32 = randomBytes32
+    val H: ByteVector32 = Crypto.sha256(R)
     val sender = TestProbe()
     val receiverPubkey = r.underlyingActor.nodeParams.nodeId
     val expiry = 400144
-    val cmd = PaymentLifecycle.buildCommand(amountMsat, expiry, H, Hop(null, receiverPubkey, null) :: Nil)._1.copy(commit = false)
+    val cmd = PaymentLifecycle.buildCommand(UUID.randomUUID, amountMsat, expiry, H, Hop(null, receiverPubkey, null) :: Nil)._1.copy(commit = false)
     sender.send(s, cmd)
     sender.expectMsg("ok")
     val htlc = s2r.expectMsgType[UpdateAddHtlc]
@@ -126,7 +124,7 @@ trait StateTestsHelperMethods extends TestKitBase {
     (R, htlc)
   }
 
-  def fulfillHtlc(id: Long, R: BinaryData, s: TestFSMRef[State, Data, Channel], r: TestFSMRef[State, Data, Channel], s2r: TestProbe, r2s: TestProbe) = {
+  def fulfillHtlc(id: Long, R: ByteVector32, s: TestFSMRef[State, Data, Channel], r: TestFSMRef[State, Data, Channel], s2r: TestProbe, r2s: TestProbe) = {
     val sender = TestProbe()
     sender.send(s, CMD_FULFILL_HTLC(id, R))
     sender.expectMsg("ok")

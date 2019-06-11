@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,20 +16,19 @@
 
 package fr.acinq.eclair.blockchain.fee
 
-import akka.actor.ActorSystem
 import akka.util.Timeout
+import com.softwaremill.sttp.okhttp.OkHttpFutureBackend
+import grizzled.slf4j.Logging
 import org.json4s.DefaultFormats
-import org.junit.runner.RunWith
 import org.scalatest.FunSuite
-import org.scalatest.junit.JUnitRunner
 
 import scala.concurrent.Await
 
 /**
   * Created by PM on 27/01/2017.
   */
-@RunWith(classOf[JUnitRunner])
-class EarnDotComFeeProviderSpec extends FunSuite {
+
+class EarnDotComFeeProviderSpec extends FunSuite with Logging {
 
   import EarnDotComFeeProvider._
   import org.json4s.jackson.JsonMethods.parse
@@ -51,30 +50,30 @@ class EarnDotComFeeProviderSpec extends FunSuite {
     val json = parse(sample_response)
     val feeRanges = parseFeeRanges(json)
     val fee = extractFeerate(feeRanges, 6)
-    assert(fee === 230)
+    assert(fee === 230 * 1000)
   }
 
   test("extract all fees") {
     val json = parse(sample_response)
     val feeRanges = parseFeeRanges(json)
     val feerates = extractFeerates(feeRanges)
-    val ref = FeeratesPerByte(
-      block_1 = 400,
-      blocks_2 = 350,
-      blocks_6 = 230,
-      blocks_12 = 140,
-      blocks_36 = 60,
-      blocks_72 = 40)
+    val ref = FeeratesPerKB(
+      block_1 = 400 * 1000,
+      blocks_2 = 350 * 1000,
+      blocks_6 = 230 * 1000,
+      blocks_12 = 140 * 1000,
+      blocks_36 = 60 * 1000,
+      blocks_72 = 40 * 1000)
     assert(feerates === ref)
   }
 
   test("make sure API hasn't changed") {
     import scala.concurrent.ExecutionContext.Implicits.global
     import scala.concurrent.duration._
-    implicit val system = ActorSystem()
+    implicit val sttpBackend  = OkHttpFutureBackend()
     implicit val timeout = Timeout(30 seconds)
     val provider = new EarnDotComFeeProvider()
-    Await.result(provider.getFeerates, 10 seconds)
+    logger.info("earn.com livenet fees: " + Await.result(provider.getFeerates, 10 seconds))
   }
 
 }

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,10 +16,10 @@
 
 package fr.acinq.eclair.wire
 
-import fr.acinq.bitcoin.BinaryData
-import fr.acinq.eclair.wire.LightningMessageCodecs.{binarydata, channelUpdateCodec, uint64}
-import scodec.Codec
+import fr.acinq.bitcoin.ByteVector32
+import fr.acinq.eclair.wire.LightningMessageCodecs.{bytes32, channelUpdateCodec, uint64}
 import scodec.codecs._
+import scodec.{Attempt, Codec}
 
 /**
   * see https://github.com/lightningnetwork/lightning-rfc/blob/master/04-onion-routing.md
@@ -28,7 +28,7 @@ import scodec.codecs._
 
 // @formatter:off
 sealed trait FailureMessage { def message: String }
-sealed trait BadOnion extends FailureMessage { def onionHash: BinaryData }
+sealed trait BadOnion extends FailureMessage { def onionHash: ByteVector32 }
 sealed trait Perm extends FailureMessage
 sealed trait Node extends FailureMessage
 sealed trait Update extends FailureMessage { def update: ChannelUpdate }
@@ -37,18 +37,18 @@ case object InvalidRealm extends Perm { def message = "realm was not understood 
 case object TemporaryNodeFailure extends Node { def message = "general temporary failure of the processing node" }
 case object PermanentNodeFailure extends Perm with Node { def message = "general permanent failure of the processing node" }
 case object RequiredNodeFeatureMissing extends Perm with Node { def message = "processing node requires features that are missing from this onion" }
-case class InvalidOnionVersion(onionHash: BinaryData) extends BadOnion with Perm { def message = "onion version was not understood by the processing node" }
-case class InvalidOnionHmac(onionHash: BinaryData) extends BadOnion with Perm { def message = "onion HMAC was incorrect when it reached the processing node" }
-case class InvalidOnionKey(onionHash: BinaryData) extends BadOnion with Perm { def message = "ephemeral key was unparsable by the processing node" }
+case class InvalidOnionVersion(onionHash: ByteVector32) extends BadOnion with Perm { def message = "onion version was not understood by the processing node" }
+case class InvalidOnionHmac(onionHash: ByteVector32) extends BadOnion with Perm { def message = "onion HMAC was incorrect when it reached the processing node" }
+case class InvalidOnionKey(onionHash: ByteVector32) extends BadOnion with Perm { def message = "ephemeral key was unparsable by the processing node" }
 case class TemporaryChannelFailure(update: ChannelUpdate) extends Update { def message = s"channel ${update.shortChannelId} is currently unavailable" }
 case object PermanentChannelFailure extends Perm { def message = "channel is permanently unavailable" }
 case object RequiredChannelFeatureMissing extends Perm { def message = "channel requires features not present in the onion" }
 case object UnknownNextPeer extends Perm { def message = "processing node does not know the next peer in the route" }
 case class AmountBelowMinimum(amountMsat: Long, update: ChannelUpdate) extends Update { def message = s"payment amount was below the minimum required by the channel" }
 case class FeeInsufficient(amountMsat: Long, update: ChannelUpdate) extends Update { def message = s"payment fee was below the minimum required by the channel" }
-case class ChannelDisabled(flags: BinaryData, update: ChannelUpdate) extends Update { def message = "channel is currently disabled" }
+case class ChannelDisabled(messageFlags: Byte, channelFlags: Byte, update: ChannelUpdate) extends Update { def message = "channel is currently disabled" }
 case class IncorrectCltvExpiry(expiry: Long, update: ChannelUpdate) extends Update { def message = "payment expiry doesn't match the value in the onion" }
-case object UnknownPaymentHash extends Perm { def message = "payment hash is unknown to the final node" }
+case class IncorrectOrUnknownPaymentDetails(amountMsat: Long) extends Perm { def message = "incorrect payment amount or unknown payment hash" }
 case object IncorrectPaymentAmount extends Perm { def message = "payment amount is incorrect" }
 case class ExpiryTooSoon(update: ChannelUpdate) extends Update { def message = "payment expiry is too close to the current block height for safe handling by the relaying node" }
 case object FinalExpiryTooSoon extends FailureMessage { def message = "payment expiry is too close to the current block height for safe handling by the final node" }
@@ -63,9 +63,13 @@ object FailureMessageCodecs {
   val NODE = 0x2000
   val UPDATE = 0x1000
 
-  val sha256Codec: Codec[BinaryData] = ("sha256Codec" | binarydata(32))
+  val sha256Codec: Codec[ByteVector32] = ("sha256Codec" | bytes32)
 
-  val channelUpdateWithLengthCodec = variableSizeBytes(uint16, channelUpdateCodec)
+  val channelUpdateCodecWithType = LightningMessageCodecs.lightningMessageCodec.narrow[ChannelUpdate](f => Attempt.successful(f.asInstanceOf[ChannelUpdate]), g => g)
+
+  // NB: for historical reasons some implementations were including/ommitting the message type (258 for ChannelUpdate)
+  // this codec supports both versions for decoding, and will encode with the message type
+  val channelUpdateWithLengthCodec = variableSizeBytes(uint16, choice(channelUpdateCodecWithType, channelUpdateCodec))
 
   val failureMessageCodec = discriminated[FailureMessage].by(uint16)
     .typecase(PERM | 1, provide(InvalidRealm))
@@ -83,11 +87,11 @@ object FailureMessageCodecs {
     .typecase(UPDATE | 12, (("amountMsat" | uint64) :: ("channelUpdate" | channelUpdateWithLengthCodec)).as[FeeInsufficient])
     .typecase(UPDATE | 13, (("expiry" | uint32) :: ("channelUpdate" | channelUpdateWithLengthCodec)).as[IncorrectCltvExpiry])
     .typecase(UPDATE | 14, (("channelUpdate" | channelUpdateWithLengthCodec)).as[ExpiryTooSoon])
-    .typecase(UPDATE | 20, (("flags" | binarydata(2)) :: ("channelUpdate" | channelUpdateWithLengthCodec)).as[ChannelDisabled])
-    .typecase(PERM | 15, provide(UnknownPaymentHash))
+    .typecase(UPDATE | 20, (("messageFlags" | byte) :: ("channelFlags" | byte) :: ("channelUpdate" | channelUpdateWithLengthCodec)).as[ChannelDisabled])
+    .typecase(PERM | 15, (("amountMsat" | withDefaultValue(optional(bitsRemaining, uint64), 0L))).as[IncorrectOrUnknownPaymentDetails])
     .typecase(PERM | 16, provide(IncorrectPaymentAmount))
     .typecase(17, provide(FinalExpiryTooSoon))
     .typecase(18, (("expiry" | uint32)).as[FinalIncorrectCltvExpiry])
-    .typecase(19, (("amountMsat" | uint32)).as[FinalIncorrectHtlcAmount])
+    .typecase(19, (("amountMsat" | uint64)).as[FinalIncorrectHtlcAmount])
     .typecase(21, provide(ExpiryTooFar))
 }

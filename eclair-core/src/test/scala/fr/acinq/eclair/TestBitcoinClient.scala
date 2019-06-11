@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -27,7 +27,7 @@ import scala.concurrent.{ExecutionContext, Future}
 /**
   * Created by PM on 26/04/2016.
   */
-class TestBitcoinClient()(implicit system: ActorSystem) extends ExtendedBitcoinClient(new BasicBitcoinJsonRPCClient("", "", "", 0)) {
+class TestBitcoinClient()(implicit system: ActorSystem) extends ExtendedBitcoinClient(new BasicBitcoinJsonRPCClient("", "", "", 0)(http = null)) {
 
   import scala.concurrent.ExecutionContext.Implicits.global
 

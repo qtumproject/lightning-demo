@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,8 @@
 
 package fr.acinq.eclair.blockchain
 
-import fr.acinq.bitcoin.{BinaryData, Satoshi, Transaction}
+import fr.acinq.bitcoin.{Satoshi, Transaction}
+import scodec.bits.ByteVector
 
 import scala.concurrent.Future
 
@@ -29,7 +30,7 @@ trait EclairWallet {
 
   def getFinalAddress: Future[String]
 
-  def makeFundingTx(pubkeyScript: BinaryData, amount: Satoshi, feeRatePerKw: Long): Future[MakeFundingTxResponse]
+  def makeFundingTx(pubkeyScript: ByteVector, amount: Satoshi, feeRatePerKw: Long): Future[MakeFundingTxResponse]
 
   /**
     * Committing *must* include publishing the transaction on the network.
@@ -52,6 +53,17 @@ trait EclairWallet {
     */
   def rollback(tx: Transaction): Future[Boolean]
 
+
+  /**
+    * Tests whether the inputs of the provided transaction have been spent by another transaction.
+    *
+    * Implementations may always return false if they don't want to implement it
+    *
+    * @param tx
+    * @return
+    */
+  def doubleSpent(tx: Transaction): Future[Boolean]
+
 }
 
-final case class MakeFundingTxResponse(fundingTx: Transaction, fundingTxOutputIndex: Int)
+final case class MakeFundingTxResponse(fundingTx: Transaction, fundingTxOutputIndex: Int, fee: Satoshi)

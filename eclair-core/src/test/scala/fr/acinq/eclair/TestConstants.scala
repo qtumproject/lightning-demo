@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,17 +16,18 @@
 
 package fr.acinq.eclair
 
-import java.net.InetSocketAddress
-import java.sql.DriverManager
+import java.sql.{Connection, DriverManager}
 
 import fr.acinq.bitcoin.Crypto.PrivateKey
-import fr.acinq.bitcoin.{BinaryData, Block, Script}
+import fr.acinq.bitcoin.{Block, ByteVector32, Script}
 import fr.acinq.eclair.NodeParams.BITCOIND
 import fr.acinq.eclair.crypto.LocalKeyManager
+import fr.acinq.eclair.db._
 import fr.acinq.eclair.db.sqlite._
 import fr.acinq.eclair.io.Peer
-import fr.acinq.eclair.wire.Color
-
+import fr.acinq.eclair.router.RouterConf
+import fr.acinq.eclair.wire.{Color, NodeAddress}
+import scodec.bits.ByteVector
 import scala.concurrent.duration._
 
 /**
@@ -37,21 +38,25 @@ object TestConstants {
   val pushMsat = 200000000L
   val feeratePerKw = 10000L
 
-  object Alice {
-    val seed = BinaryData("01" * 32)
-    val keyManager = new LocalKeyManager(seed, Block.RegtestGenesisBlock.hash)
+  def sqliteInMemory() = DriverManager.getConnection("jdbc:sqlite::memory:")
 
-    def sqlite = DriverManager.getConnection("jdbc:sqlite::memory:")
+  def inMemoryDb(connection: Connection = sqliteInMemory()): Databases = Databases.databaseByConnections(connection, connection, connection)
+
+
+  object Alice {
+    val seed = ByteVector32(ByteVector.fill(32)(1))
+    val keyManager = new LocalKeyManager(seed, Block.RegtestGenesisBlock.hash)
 
     // This is a function, and not a val! When called will return a new NodeParams
     def nodeParams = NodeParams(
       keyManager = keyManager,
       alias = "alice",
       color = Color(1, 2, 3),
-      publicAddresses = new InetSocketAddress("localhost", 9731) :: Nil,
-      globalFeatures = "",
-      localFeatures = "00",
-      dustLimitSatoshis = 546,
+      publicAddresses = NodeAddress.fromParts("localhost", 9731).get :: Nil,
+      globalFeatures = ByteVector.empty,
+      localFeatures = ByteVector(0),
+      overrideFeatures = Map.empty,
+      dustLimitSatoshis = 1100,
       maxHtlcValueInFlightMsat = UInt64(150000000),
       maxAcceptedHtlcs = 100,
       expiryDeltaBlocks = 144,
@@ -64,27 +69,39 @@ object TestConstants {
       feeProportionalMillionth = 10,
       reserveToFundingRatio = 0.01, // note: not used (overridden below)
       maxReserveToFundingRatio = 0.05,
-      channelsDb = new SqliteChannelsDb(sqlite),
-      peersDb = new SqlitePeersDb(sqlite),
-      networkDb = new SqliteNetworkDb(sqlite),
-      pendingRelayDb = new SqlitePendingRelayDb(sqlite),
-      paymentsDb = new SqlitePaymentsDb(sqlite),
-      routerBroadcastInterval = 60 seconds,
+      db = inMemoryDb(sqliteInMemory),
+      revocationTimeout = 20 seconds,
       pingInterval = 30 seconds,
+      pingTimeout = 10 seconds,
+      pingDisconnect = true,
       maxFeerateMismatch = 1.5,
       updateFeeMinDiffRatio = 0.1,
       autoReconnect = false,
       chainHash = Block.RegtestGenesisBlock.hash,
       channelFlags = 1,
-      channelExcludeDuration = 5 seconds,
       watcherType = BITCOIND,
       paymentRequestExpiry = 1 hour,
-      maxPendingPaymentRequests = 10000000,
-      maxPaymentFee = 0.03)
+      minFundingSatoshis = 1000L,
+      routerConf = RouterConf(
+        randomizeRouteSelection = false,
+        channelExcludeDuration = 60 seconds,
+        routerBroadcastInterval = 5 seconds,
+        searchMaxFeeBaseSat = 21,
+        searchMaxFeePct = 0.03,
+        searchMaxCltv = 2016,
+        searchMaxRouteLength = 20,
+        searchHeuristicsEnabled = false,
+        searchRatioCltv = 0.0,
+        searchRatioChannelAge = 0.0,
+        searchRatioChannelCapacity = 0.0
+      ),
+      socksProxy_opt = None,
+      maxPaymentAttempts = 5
+    )
 
     def channelParams = Peer.makeChannelParams(
       nodeParams = nodeParams,
-      defaultFinalScriptPubKey = Script.write(Script.pay2wpkh(PrivateKey(Array.fill[Byte](32)(4), compressed = true).publicKey)),
+      defaultFinalScriptPubKey = Script.write(Script.pay2wpkh(PrivateKey(randomBytes32, compressed = true).publicKey)),
       isFunder = true,
       fundingSatoshis).copy(
       channelReserveSatoshis = 10000 // Bob will need to keep that much satoshis as direct payment
@@ -92,18 +109,17 @@ object TestConstants {
   }
 
   object Bob {
-    val seed = BinaryData("02" * 32)
+    val seed = ByteVector32(ByteVector.fill(32)(2))
     val keyManager = new LocalKeyManager(seed, Block.RegtestGenesisBlock.hash)
-
-    def sqlite = DriverManager.getConnection("jdbc:sqlite::memory:")
 
     def nodeParams = NodeParams(
       keyManager = keyManager,
       alias = "bob",
       color = Color(4, 5, 6),
-      publicAddresses = new InetSocketAddress("localhost", 9732) :: Nil,
-      globalFeatures = "",
-      localFeatures = "00", // no announcement
+      publicAddresses = NodeAddress.fromParts("localhost", 9732).get :: Nil,
+      globalFeatures = ByteVector.empty,
+      localFeatures = ByteVector.empty, // no announcement
+      overrideFeatures = Map.empty,
       dustLimitSatoshis = 1000,
       maxHtlcValueInFlightMsat = UInt64.MaxValue, // Bob has no limit on the combined max value of in-flight htlcs
       maxAcceptedHtlcs = 30,
@@ -117,27 +133,39 @@ object TestConstants {
       feeProportionalMillionth = 10,
       reserveToFundingRatio = 0.01, // note: not used (overridden below)
       maxReserveToFundingRatio = 0.05,
-      channelsDb = new SqliteChannelsDb(sqlite),
-      peersDb = new SqlitePeersDb(sqlite),
-      networkDb = new SqliteNetworkDb(sqlite),
-      pendingRelayDb = new SqlitePendingRelayDb(sqlite),
-      paymentsDb = new SqlitePaymentsDb(sqlite),
-      routerBroadcastInterval = 60 seconds,
+      db = inMemoryDb(sqliteInMemory),
+      revocationTimeout = 20 seconds,
       pingInterval = 30 seconds,
+      pingTimeout = 10 seconds,
+      pingDisconnect = true,
       maxFeerateMismatch = 1.0,
       updateFeeMinDiffRatio = 0.1,
       autoReconnect = false,
       chainHash = Block.RegtestGenesisBlock.hash,
       channelFlags = 1,
-      channelExcludeDuration = 5 seconds,
       watcherType = BITCOIND,
       paymentRequestExpiry = 1 hour,
-      maxPendingPaymentRequests = 10000000,
-      maxPaymentFee = 0.03)
+      minFundingSatoshis = 1000L,
+      routerConf = RouterConf(
+        randomizeRouteSelection = false,
+        channelExcludeDuration = 60 seconds,
+        routerBroadcastInterval = 5 seconds,
+        searchMaxFeeBaseSat = 21,
+        searchMaxFeePct = 0.03,
+        searchMaxCltv = 2016,
+        searchMaxRouteLength = 20,
+        searchHeuristicsEnabled = false,
+        searchRatioCltv = 0.0,
+        searchRatioChannelAge = 0.0,
+        searchRatioChannelCapacity = 0.0
+      ),
+      socksProxy_opt = None,
+      maxPaymentAttempts = 5
+    )
 
     def channelParams = Peer.makeChannelParams(
       nodeParams = nodeParams,
-      defaultFinalScriptPubKey = Script.write(Script.pay2wpkh(PrivateKey(Array.fill[Byte](32)(5), compressed = true).publicKey)),
+      defaultFinalScriptPubKey = Script.write(Script.pay2wpkh(PrivateKey(randomBytes32, compressed = true).publicKey)),
       isFunder = false,
       fundingSatoshis).copy(
       channelReserveSatoshis = 20000 // Alice will need to keep that much satoshis as direct payment

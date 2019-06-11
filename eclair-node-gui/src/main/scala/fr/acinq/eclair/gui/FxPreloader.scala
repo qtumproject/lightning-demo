@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,6 +16,8 @@
 
 package fr.acinq.eclair.gui
 
+import fr.acinq.eclair.gui.controllers.SplashController
+import grizzled.slf4j.Logging
 import javafx.application.Preloader
 import javafx.application.Preloader.{ErrorNotification, PreloaderNotification}
 import javafx.fxml.FXMLLoader
@@ -23,9 +25,6 @@ import javafx.scene.image.Image
 import javafx.scene.paint.Color
 import javafx.scene.{Parent, Scene}
 import javafx.stage.{Stage, StageStyle}
-
-import fr.acinq.eclair.gui.controllers.SplashController
-import grizzled.slf4j.Logging
 
 sealed trait AppNotificationType
 

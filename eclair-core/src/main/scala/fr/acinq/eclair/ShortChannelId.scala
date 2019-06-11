@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -22,16 +22,25 @@ package fr.acinq.eclair
   * See BOLT 7: https://github.com/lightningnetwork/lightning-rfc/blob/master/07-routing-gossip.md#requirements
   *
   */
-case class ShortChannelId(private val id: Long) {
+case class ShortChannelId(private val id: Long) extends Ordered[ShortChannelId] {
 
   def toLong: Long = id
 
-  override def toString: String = id.toHexString
+  override def toString: String = {
+    val TxCoordinates(blockHeight, txIndex, outputIndex) = ShortChannelId.coordinates(this)
+    s"${blockHeight}x${txIndex}x${outputIndex}"
+  }
+
+  // we use an unsigned long comparison here
+  override def compare(that: ShortChannelId): Int = (this.id + Long.MinValue).compareTo(that.id + Long.MinValue)
 }
 
 object ShortChannelId {
 
-  def apply(s: String): ShortChannelId = ShortChannelId(java.lang.Long.parseLong(s, 16))
+  def apply(s: String): ShortChannelId = s.split("x").toList match {
+    case blockHeight :: txIndex :: outputIndex :: Nil => ShortChannelId(toShortId(blockHeight.toInt, txIndex.toInt, outputIndex.toInt))
+    case _ => throw new IllegalArgumentException(s"Invalid short channel id: $s")
+  }
 
   def apply(blockHeight: Int, txIndex: Int, outputIndex: Int): ShortChannelId = ShortChannelId(toShortId(blockHeight, txIndex, outputIndex))
 
