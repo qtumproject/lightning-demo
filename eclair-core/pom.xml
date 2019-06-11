@@ -79,10 +79,10 @@
                 <activeByDefault>true</activeByDefault>
             </activation>
             <properties>
-                <bitcoind.url>https://github.com/qtumproject/qtum/releases/download/mainnet-ignition-v0.14.16/qtum-0.14.16-x86_64-linux-gnu.tar.gz
+                <bitcoind.url>https://github.com/qtumproject/qtum/releases/download/mainnet-ignition-v0.17.5/qtum-0.17.5-x86_64-linux-gnu.tar.gz
                 </bitcoind.url>
-                <bitcoind.md5>747baea7b5a4691207376683060576d5</bitcoind.md5>
-                <bitcoind.sha1>768a591ccf2a7d301456d6f508496f628dca1bb6</bitcoind.sha1>
+                <bitcoind.md5>f000dc744abbe17ff1bbfe9810d5b4b5</bitcoind.md5>
+                <bitcoind.sha1>e7ba4631d8e30eb7e74577a34cbdc87738278d15</bitcoind.sha1>
             </properties>
         </profile>
         <profile>
@@ -93,10 +93,10 @@
                 </os>
             </activation>
             <properties>
-                <bitcoind.url>https://github.com/qtumproject/qtum/releases/download/mainnet-ignition-v0.14.16/qtum-0.14.16-osx64.tar.gz
+                <bitcoind.url>https://github.com/qtumproject/qtum/releases/download/mainnet-ignition-v0.17.5/qtum-0.17.5-osx64.tar.gz
                 </bitcoind.url>
-                <bitcoind.md5>b654fb291176b7dd488bbc6b21e1e6a3</bitcoind.md5>
-                <bitcoind.sha1>5a5ae763434e521509e84f180996350ee10a4781</bitcoind.sha1>
+                <bitcoind.md5>effeacd684c27e2ea073686210bafa40</bitcoind.md5>
+                <bitcoind.sha1>d172a018036a63e5285fa7df7d977957450c17ec</bitcoind.sha1>
             </properties>
         </profile>
         <profile>
@@ -107,9 +107,9 @@
                 </os>
             </activation>
             <properties>
-                <bitcoind.url>https://github.com/qtumproject/qtum/releases/download/mainnet-ignition-v0.14.16/qtum-0.14.16-win64.zip</bitcoind.url>
-                <bitcoind.md5>dd9be9ede4075031f386da826254f1a6</bitcoind.md5>
-                <bitcoind.sha1>31229df7f76f25b7b2e2bbf7b48aa2620d09d5cc</bitcoind.sha1>
+                <bitcoind.url>https://github.com/qtumproject/qtum/releases/download/mainnet-ignition-v0.17.5/qtum-0.17.5-win64.zip</bitcoind.url>
+                <bitcoind.md5>df82a462479275711829b930e4a2d5b6</bitcoind.md5>
+                <bitcoind.sha1>55091710cfcf7645feb3b4052e27be17ad7ba448</bitcoind.sha1>
             </properties>
         </profile>
     </profiles>
