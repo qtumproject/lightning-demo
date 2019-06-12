@@ -44,8 +44,8 @@ trait BitcoindService extends Logging {
   val INTEGRATION_TMP_DIR = new File(TestUtils.BUILD_DIRECTORY, s"integration-${UUID.randomUUID()}")
   logger.info(s"using tmp dir: $INTEGRATION_TMP_DIR")
 
-  val PATH_BITCOIND = new File(TestUtils.BUILD_DIRECTORY, "bitcoin-0.17.1/bin/bitcoind")
-  val PATH_BITCOIND_DATADIR = new File(INTEGRATION_TMP_DIR, "datadir-bitcoin")
+  val PATH_BITCOIND = new File(TestUtils.BUILD_DIRECTORY, "qtum-0.17.5/bin/qtumd")
+  val PATH_BITCOIND_DATADIR = new File(INTEGRATION_TMP_DIR, "datadir-qtum")
 
   var bitcoind: Process = null
   var bitcoinrpcclient: BitcoinJsonRPCClient = null
@@ -55,8 +55,8 @@ trait BitcoindService extends Logging {
 
   def startBitcoind(): Unit = {
     Files.createDirectories(PATH_BITCOIND_DATADIR.toPath)
-    if (!Files.exists(new File(PATH_BITCOIND_DATADIR.toString, "bitcoin.conf").toPath)) {
-      Files.copy(classOf[IntegrationSpec].getResourceAsStream("/integration/bitcoin.conf"), new File(PATH_BITCOIND_DATADIR.toString, "bitcoin.conf").toPath, StandardCopyOption.REPLACE_EXISTING)
+    if (!Files.exists(new File(PATH_BITCOIND_DATADIR.toString, "qtum.conf").toPath)) {
+      Files.copy(classOf[IntegrationSpec].getResourceAsStream("/integration/qtum.conf"), new File(PATH_BITCOIND_DATADIR.toString, "bitcoin.conf").toPath, StandardCopyOption.REPLACE_EXISTING)
     }
 
     bitcoind = s"$PATH_BITCOIND -datadir=$PATH_BITCOIND_DATADIR".run()
@@ -86,7 +86,7 @@ trait BitcoindService extends Logging {
       sender.receiveOne(5 second).isInstanceOf[JValue]
     }, max = 30 seconds, interval = 500 millis)
     logger.info(s"generating initial blocks...")
-    sender.send(bitcoincli, BitcoinReq("generate", 150))
+    sender.send(bitcoincli, BitcoinReq("generate", 1000))
     sender.expectMsgType[JValue](30 seconds)
   }
 
