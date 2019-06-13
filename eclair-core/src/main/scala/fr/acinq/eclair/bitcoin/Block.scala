@@ -155,7 +155,7 @@ object Block extends BtcSerializer[Block] {
 
   // genesis blocks
   val LivenetGenesisBlock = {
-    val script = OP_PUSHDATA(writeUInt32(486604799L)) :: OP_PUSHDATA(hex"04") :: OP_PUSHDATA(ByteVector("Sep 02, 2017 Bitcoin breaks $5,000 in latest price frenzy".getBytes("UTF-8"))) :: Nil
+    val script = OP_PUSHDATA(writeUInt32(488804799L)) :: OP_PUSHDATA(hex"04") :: OP_PUSHDATA(ByteVector("Sep 02, 2017 Bitcoin breaks $5,000 in latest price frenzy".getBytes("UTF-8"))) :: Nil
     val scriptPubKey = OP_PUSHDATA(hex"040d61d8653448c98731ee5fffd303c15e71ec2057b77f11ab3601979728cdaff2d68afbba14e4fa0bc44f2072b0b23ef63717f8cdfbe58dcd33f32b6afe98741a") :: OP_CHECKSIG :: Nil
     Block(
       BlockHeader(version = 1, hashPreviousBlock = ByteVector32.Zeroes, hashMerkleRoot = ByteVector32(hex"6db905142382324db417761891f2d2f355ea92f27ab0fc35e59e90b50e0534ed"), time = 1504695029, bits = 0x1f00ffff, nonce = 8026361,
