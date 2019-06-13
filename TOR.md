@@ -91,7 +91,7 @@ You can see what onion address is assigned using `eclair-cli`:
 ```shell
 eclair-cli getinfo
 ```
-Eclair saves the Tor endpoint's private key in `~/.eclair/tor_pk`, so that it can recreate the endpoint address after 
+Eclair saves the Tor endpoint's private key in `~/.qtum-eclair/tor_pk`, so that it can recreate the endpoint address after 
 restart. If you remove the private key eclair will regenerate the endpoint address.   
 
 There are two possible values for `protocol-version`:

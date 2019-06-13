@@ -77,9 +77,9 @@ java -jar eclair-node-<version>-<commit_id>.jar
 
 #### Configuration file
 
-Lighting reads its configuration file, and write its logs, to `~/.eclair` by default.
+Lighting reads its configuration file, and write its logs, to `~/.qtum-eclair` by default.
 
-To change your node's configuration, create a file named `eclair.conf` in `~/.eclair`. Here's an example configuration file:
+To change your node's configuration, create a file named `eclair.conf` in `~/.qtum-eclair`. Here's an example configuration file:
 
 ```
 eclair.chain=testnet
@@ -114,7 +114,7 @@ Some advanced parameters can be changed with java environment variables. Most us
 
 name                  | description                                | default value
 ----------------------|--------------------------------------------|--------------
-eclair.datadir        | Path to the data directory                 | ~/.eclair
+eclair.datadir        | Path to the data directory                 | ~/.qtum-eclair
 eclair.headless       | Run eclair without a GUI                   | 
 eclair.printToConsole | Log to stdout (in addition to eclair.log)  |
 

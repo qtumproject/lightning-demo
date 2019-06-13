@@ -27,7 +27,7 @@ import javafx.application.Application
   * Created by PM on 25/01/2016.
   */
 object JavafxBoot extends App with Logging {
-  val datadir = new File(System.getProperty("eclair.datadir", System.getProperty("user.home") + "/.eclair"))
+  val datadir = new File(System.getProperty("eclair.datadir", System.getProperty("user.home") + "/.qtum-eclair"))
   try {
     val headless = System.getProperty("eclair.headless") != null
 
