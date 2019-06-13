@@ -365,7 +365,6 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
       case ELECTRUM => "Electrum"
     }
     bitcoinWallet.setText(wallet)
-    bitcoinVersion.setText(s"v${setup.version}")
     bitcoinChain.setText(s"${setup.chain.toUpperCase()}")
     bitcoinChain.getStyleClass.add(setup.chain)
 
