@@ -90,7 +90,7 @@ class Setup(datadir: File,
   val chain = config.getString("chain")
   val chaindir = new File(datadir, chain)
   val keyManager = new LocalKeyManager(seed, NodeParams.makeChainHash(chain))
-  val (user, pass) = NodeParams.getRPCUserPass(datadir, config)
+  val (user, pass) = NodeParams.getRPCUserPass(config)
 
   val database = db match {
     case Some(d) => d

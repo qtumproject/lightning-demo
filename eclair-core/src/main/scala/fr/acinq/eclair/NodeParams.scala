@@ -116,11 +116,18 @@ object NodeParams {
     }
   }
 
-  def getRPCUserPass(datadir: File, config: Config): (String, String) = {
+  def getRPCUserPass(config: Config): (String, String) = {
     var user = config.getString("bitcoind.rpcuser")
     var pass = config.getString("bitcoind.rpcpassword")
-    if(user == "" && pass == "") {                           //from directory
-      val cookieFile = new File(datadir, ".cookie")
+    if(user == "" && pass == "") {//from directory
+      var bitdir = config.getString("bitcoind.bitdir")
+      if(bitdir == "") //for console
+          bitdir = System.getProperty("user.home") + "/.qtum"
+      val cookieFile = config.getString("chain") match {
+        case "mainnet" => new File(bitdir, ".cookie")
+        case "testnet" => new File(bitdir, "testnet3/.cookie")
+        case "regtest" => new File(bitdir, "regtest/.cookie")
+      }
       val cookie = Source.fromFile(cookieFile, "UTF-8").mkString.split(":")
       user = cookie(0)
       pass = cookie(1)
