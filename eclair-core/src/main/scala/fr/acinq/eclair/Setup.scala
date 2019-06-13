@@ -91,6 +91,13 @@ class Setup(datadir: File,
   val chaindir = new File(datadir, chain)
   val keyManager = new LocalKeyManager(seed, NodeParams.makeChainHash(chain))
   val (user, pass) = NodeParams.getRPCUserPass(config)
+  var rpcport = config.getInt("bitcoind.rpcport")
+  if (rpcport == 0) {
+    rpcport = chain match {
+      case "mainnet" => 3889
+      case _ => 13889
+    }
+  }
 
   val database = db match {
     case Some(d) => d
@@ -117,7 +124,7 @@ class Setup(datadir: File,
         user = user,
         password = pass,
         host = config.getString("bitcoind.host"),
-        port = config.getInt("bitcoind.rpcport"))
+        port = rpcport)
       implicit val timeout = Timeout(30 seconds)
       implicit val formats = org.json4s.DefaultFormats
       val future = for {
