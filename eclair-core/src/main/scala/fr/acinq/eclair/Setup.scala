@@ -142,8 +142,8 @@ class Setup(datadir: File,
       if (chainHash != Block.RegtestGenesisBlock.hash) {
         assert(unspentAddresses.forall(address => !isPay2PubkeyHash(address)), "Make sure that all your UTXOS are segwit UTXOS and not p2pkh (check out our README for more details)")
       }
-      assert(progress > 0.999, s"bitcoind should be synchronized (progress=$progress")
-      assert(headers - blocks <= 1, s"bitcoind should be synchronized (headers=$headers blocks=$blocks")
+      assert(progress > 0.999, s"qtumd should be synchronized (progress=$progress")
+      assert(headers - blocks <= 1, s"qtumd should be synchronized (headers=$headers blocks=$blocks")
       Bitcoind(bitcoinClient)
     case ELECTRUM =>
       val addresses = config.hasPath("electrum") match {
@@ -373,11 +373,11 @@ case class Kit(nodeParams: NodeParams,
                server: ActorRef,
                wallet: EclairWallet)
 
-case object BitcoinZMQConnectionTimeoutException extends RuntimeException("could not connect to bitcoind using zeromq")
+case object BitcoinZMQConnectionTimeoutException extends RuntimeException("could not connect to qtumd using zeromq")
 
-case object BitcoinRPCConnectionException extends RuntimeException("could not connect to bitcoind using json-rpc")
+case object BitcoinRPCConnectionException extends RuntimeException("could not connect to qtumd using json-rpc")
 
-case object BitcoinWalletDisabledException extends RuntimeException("bitcoind must have wallet support enabled")
+case object BitcoinWalletDisabledException extends RuntimeException("qtumd must have wallet support enabled")
 
 case object EmptyAPIPasswordException extends RuntimeException("must set a password for the json-rpc api")
 

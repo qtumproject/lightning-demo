@@ -60,7 +60,7 @@ class BitcoinCoreFeeProviderSpec extends TestKit(ActorSystem("test")) with Bitco
     stopBitcoind()
   }
 
-  test("wait bitcoind ready") {
+  test("wait qtumd ready") {
     waitForBitcoindReady()
   }
 

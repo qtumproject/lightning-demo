@@ -80,7 +80,7 @@ trait BitcoindService extends Logging {
 
   def waitForBitcoindReady(): Unit = {
     val sender = TestProbe()
-    logger.info(s"waiting for bitcoind to initialize...")
+    logger.info(s"waiting for qtumd to initialize...")
     awaitCond({
       sender.send(bitcoincli, BitcoinReq("getnetworkinfo"))
       sender.receiveOne(5 second).isInstanceOf[JValue]

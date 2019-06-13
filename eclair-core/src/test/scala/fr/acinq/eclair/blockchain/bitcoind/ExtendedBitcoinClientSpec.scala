@@ -54,7 +54,7 @@ class ExtendedBitcoinClientSpec extends TestKit(ActorSystem("test")) with Bitcoi
     stopBitcoind()
   }
 
-  test("wait bitcoind ready") {
+  test("wait qtumd ready") {
     waitForBitcoindReady()
   }
 
