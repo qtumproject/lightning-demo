@@ -97,7 +97,7 @@ class ExtendedBitcoinClientSpec extends TestKit(ActorSystem("test")) with Bitcoi
     // now let's spent the output of the tx
     val spendingTx = {
       val pos = if (changePos == 0) 1 else 0
-      bitcoinClient.invoke("createrawtransaction", Array(Map("txid" -> txid, "vout" -> pos)), Map(address -> 5.99999)).pipeTo(sender.ref)
+      bitcoinClient.invoke("createrawtransaction", Array(Map("txid" -> txid, "vout" -> pos)), Map(address -> 5.99)).pipeTo(sender.ref)
       val JString(unsignedtx) = sender.expectMsgType[JValue]
       bitcoinClient.invoke("signrawtransactionwithwallet", unsignedtx).pipeTo(sender.ref)
       val JString(signedTx) = sender.expectMsgType[JValue] \ "hex"
