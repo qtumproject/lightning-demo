@@ -108,7 +108,7 @@ package object eclair {
   def feerateKw2KB(feeratesPerKw: Long): Long = feeratesPerKw * 4
 
 
-  def isPay2PubkeyHash(address: String): Boolean = address.startsWith("1") || address.startsWith("m") || address.startsWith("n")
+  def isPay2PubkeyHash(address: String): Boolean = (address.startsWith("Q") || address.startsWith("q")) && (address.length == 34)
 
   /**
     * Tests whether the binary data is composed solely of printable ASCII characters (see BOLT 1)
