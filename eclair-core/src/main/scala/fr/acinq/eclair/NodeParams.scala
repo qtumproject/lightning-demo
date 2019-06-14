@@ -128,9 +128,14 @@ object NodeParams {
         case "testnet" => new File(bitdir, "testnet3/.cookie")
         case "regtest" => new File(bitdir, "regtest/.cookie")
       }
-      val cookie = Source.fromFile(cookieFile, "UTF-8").mkString.split(":")
-      user = cookie(0)
-      pass = cookie(1)
+      if (cookieFile.exists()) {
+        val cookie = Source.fromFile(cookieFile, "UTF-8").mkString.split(":")
+        user = cookie(0)
+        pass = cookie(1)
+      } else {
+        user = "foo"
+        pass = "bar"
+      }
     }
     (user, pass)
   }

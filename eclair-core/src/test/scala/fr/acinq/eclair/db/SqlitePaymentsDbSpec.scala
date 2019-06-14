@@ -72,7 +72,7 @@ class SqlitePaymentsDbSpec extends FunSuite {
 
     // add a few rows
     val ps1 = OutgoingPayment(id = UUID.randomUUID(), paymentHash = ByteVector32(hex"0f059ef9b55bb70cc09069ee4df854bf0fab650eee6f2b87ba26d1ad08ab114f"), None, amountMsat = 12345, createdAt = 12345, None, PENDING)
-    val i1 = PaymentRequest.read("lnbc10u1pw2t4phpp5ezwm2gdccydhnphfyepklc0wjkxhz0r4tctg9paunh2lxgeqhcmsdqlxycrqvpqwdshgueqvfjhggr0dcsry7qcqzpgfa4ecv7447p9t5hkujy9qgrxvkkf396p9zar9p87rv2htmeuunkhydl40r64n5s2k0u7uelzc8twxmp37nkcch6m0wg5tvvx69yjz8qpk94qf3")
+    val i1 = PaymentRequest.read("lnqc10u1pw2t4phpp5ezwm2gdccydhnphfyepklc0wjkxhz0r4tctg9paunh2lxgeqhcmsdqlxycrqvpqwdshgueqvfjhggr0dcsry7qxgjy2d3n6zptyedn56d7g8alv805l604nq7jwvsp2mjc6q5ppldplmpvvnxd2hk3ly4st85dk97c4gfgsjua3zl206t3vhycnt956tspm26e6c")
     val pr1 = IncomingPayment(i1.paymentHash, 12345678, 1513871928275L)
 
     preMigrationDb.addPaymentRequest(i1, ByteVector32.Zeroes)
