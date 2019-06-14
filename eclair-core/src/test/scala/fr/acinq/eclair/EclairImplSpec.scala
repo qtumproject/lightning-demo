@@ -177,7 +177,7 @@ class EclairImplSpec extends TestKit(ActorSystem("mySystem")) with fixture.FunSu
   test("receive should have an optional fallback address and use millisatoshi") { f =>
     import f._
 
-    val fallBackAddressRaw = "muhtvdmsnbQEPFuEmxcChX58fGvXaaUoVt"
+    val fallBackAddressRaw = "qXkKncTUBDa7kAA1zjc54eXDKpF1vDgp6X"
     val eclair = new EclairImpl(kit)
     eclair.receive("some desc", Some(123L), Some(456), Some(fallBackAddressRaw), None)
     val receive = paymentHandler.expectMsgType[ReceivePayment]

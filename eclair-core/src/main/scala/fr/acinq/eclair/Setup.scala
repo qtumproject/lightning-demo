@@ -170,6 +170,7 @@ class Setup(datadir: File,
             case Block.RegtestGenesisBlock.hash => ("/electrum/servers_regtest.json", false) // in regtest we connect in plaintext
             case Block.TestnetGenesisBlock.hash => ("/electrum/servers_testnet.json", true)
             case Block.LivenetGenesisBlock.hash => ("/electrum/servers_mainnet.json", true)
+            case _ => ("", false)
           }
           val stream = classOf[Setup].getResourceAsStream(addressesFile)
           ElectrumClientPool.readServerAddresses(stream, sslEnabled)
@@ -205,9 +206,9 @@ class Setup(datadir: File,
       feeProvider = (nodeParams.chainHash, bitcoin) match {
         case (Block.RegtestGenesisBlock.hash, _) => new FallbackFeeProvider(new ConstantFeeProvider(defaultFeerates) :: Nil, minFeeratePerByte)
         case (_, Bitcoind(bitcoinClient)) =>
-          new FallbackFeeProvider(new SmoothFeeProvider(new BitcoinCoreFeeProvider(bitcoinClient, defaultFeerates), smoothFeerateWindow) :: new SmoothFeeProvider(new BitgoFeeProvider(nodeParams.chainHash), smoothFeerateWindow) :: new SmoothFeeProvider(new EarnDotComFeeProvider(), smoothFeerateWindow) :: new ConstantFeeProvider(defaultFeerates) :: Nil, minFeeratePerByte) // order matters!
+          new FallbackFeeProvider(new SmoothFeeProvider(new BitcoinCoreFeeProvider(bitcoinClient, defaultFeerates), smoothFeerateWindow) :: new SmoothFeeProvider(new BitgoFeeProvider(nodeParams.chainHash), smoothFeerateWindow) :: new ConstantFeeProvider(defaultFeerates) :: Nil, minFeeratePerByte) // order matters!
         case _ =>
-          new FallbackFeeProvider(new SmoothFeeProvider(new BitgoFeeProvider(nodeParams.chainHash), smoothFeerateWindow) :: new SmoothFeeProvider(new EarnDotComFeeProvider(), smoothFeerateWindow) :: new ConstantFeeProvider(defaultFeerates) :: Nil, minFeeratePerByte) // order matters!
+          new FallbackFeeProvider(new SmoothFeeProvider(new BitgoFeeProvider(nodeParams.chainHash), smoothFeerateWindow) :: new ConstantFeeProvider(defaultFeerates) :: Nil, minFeeratePerByte) // order matters!
       }
       _ = system.scheduler.schedule(0 seconds, 10 minutes)(feeProvider.getFeerates.map {
         case feerates: FeeratesPerKB =>
