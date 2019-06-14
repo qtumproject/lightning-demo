@@ -108,7 +108,16 @@ package object eclair {
   def feerateKw2KB(feeratesPerKw: Long): Long = feeratesPerKw * 4
 
 
-  def isPay2PubkeyHash(address: String): Boolean = (address.startsWith("Q") || address.startsWith("q")) && (address.length == 34)
+  def isPay2PubkeyHash(address: String): Boolean = {
+    Try(Base58Check.decode(address)) match {
+      case Success((Base58.Prefix.PubkeyAddressTestnet, _)) => true
+      case Success((Base58.Prefix.PubkeyAddress, _))  => true
+      case Success((Base58.Prefix.ScriptAddressTestnet, _)) => true
+      case Success((Base58.Prefix.ScriptAddress, _))  => true
+      case Success(_) => false
+      case Failure(_) => false
+    }
+  }
 
   /**
     * Tests whether the binary data is composed solely of printable ASCII characters (see BOLT 1)
