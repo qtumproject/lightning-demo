@@ -139,7 +139,7 @@ object Bech32 {
   /**
     * encode a bitcoin witness address
     *
-    * @param hrp            should be "bc" or "tb"
+    * @param hrp            should be "qc" or "tq"
     * @param witnessVersion witness version (0 to 16, only 0 is currently defined)
     * @param data           witness program: if version is 0, either 20 bytes (P2WPKH) or 32 bytes (P2WSH)
     * @return a bech32 encoded witness address

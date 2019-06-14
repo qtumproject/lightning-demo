@@ -32,7 +32,7 @@ import scala.util.Try
   * Lightning Payment Request
   * see https://github.com/lightningnetwork/lightning-rfc/blob/master/11-payment-encoding.md
   *
-  * @param prefix    currency prefix; lnbc for bitcoin, lntb for bitcoin testnet
+  * @param prefix    currency prefix; lnqc for qtum, lntq for qtum testnet
   * @param amount    amount to pay (empty string means no amount is specified)
   * @param timestamp request timestamp (UNIX format)
   * @param nodeId    id of the node emitting the payment request
@@ -110,9 +110,9 @@ object PaymentRequest {
   val MAX_AMOUNT = MilliSatoshi(2147483648000L)
 
   val prefixes = Map(
-    Block.RegtestGenesisBlock.hash -> "lnbcrt",
-    Block.TestnetGenesisBlock.hash -> "lntb",
-    Block.LivenetGenesisBlock.hash -> "lnbc")
+    Block.RegtestGenesisBlock.hash -> "lnqcrt",
+    Block.TestnetGenesisBlock.hash -> "lntq",
+    Block.LivenetGenesisBlock.hash -> "lnqc")
 
   def apply(chainHash: ByteVector32, amount: Option[MilliSatoshi], paymentHash: ByteVector32, privateKey: PrivateKey,
             description: String, fallbackAddress: Option[String] = None, expirySeconds: Option[Long] = None,
@@ -226,13 +226,13 @@ object PaymentRequest {
     def toAddress(f: FallbackAddress, prefix: String): String = {
       import f.data
       f.version match {
-        case 17 if prefix == "lnbc" => Base58Check.encode(Base58.Prefix.PubkeyAddress, data)
-        case 18 if prefix == "lnbc" => Base58Check.encode(Base58.Prefix.ScriptAddress, data)
-        case 17 if prefix == "lntb" || prefix == "lnbcrt" => Base58Check.encode(Base58.Prefix.PubkeyAddressTestnet, data)
-        case 18 if prefix == "lntb" || prefix == "lnbcrt" => Base58Check.encode(Base58.Prefix.ScriptAddressTestnet, data)
-        case version if prefix == "lnbc" => Bech32.encodeWitnessAddress("bc", version, data)
-        case version if prefix == "lntb" => Bech32.encodeWitnessAddress("tb", version, data)
-        case version if prefix == "lnbcrt" => Bech32.encodeWitnessAddress("bcrt", version, data)
+        case 17 if prefix == "lnqc" => Base58Check.encode(Base58.Prefix.PubkeyAddress, data)
+        case 18 if prefix == "lnqc" => Base58Check.encode(Base58.Prefix.ScriptAddress, data)
+        case 17 if prefix == "lntq" || prefix == "lnqcrt" => Base58Check.encode(Base58.Prefix.PubkeyAddressTestnet, data)
+        case 18 if prefix == "lntq" || prefix == "lnqcrt" => Base58Check.encode(Base58.Prefix.ScriptAddressTestnet, data)
+        case version if prefix == "lnqc" => Bech32.encodeWitnessAddress("qc", version, data)
+        case version if prefix == "lntq" => Bech32.encodeWitnessAddress("tq", version, data)
+        case version if prefix == "lnqcrt" => Bech32.encodeWitnessAddress("qcrt", version, data)
       }
     }
   }
