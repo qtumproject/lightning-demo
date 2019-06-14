@@ -56,7 +56,7 @@ trait BitcoindService extends Logging {
   def startBitcoind(): Unit = {
     Files.createDirectories(PATH_BITCOIND_DATADIR.toPath)
     if (!Files.exists(new File(PATH_BITCOIND_DATADIR.toString, "qtum.conf").toPath)) {
-      Files.copy(classOf[IntegrationSpec].getResourceAsStream("/integration/qtum.conf"), new File(PATH_BITCOIND_DATADIR.toString, "bitcoin.conf").toPath, StandardCopyOption.REPLACE_EXISTING)
+      Files.copy(classOf[IntegrationSpec].getResourceAsStream("/integration/qtum.conf"), new File(PATH_BITCOIND_DATADIR.toString, "qtum.conf").toPath, StandardCopyOption.REPLACE_EXISTING)
     }
 
     bitcoind = s"$PATH_BITCOIND -datadir=$PATH_BITCOIND_DATADIR".run()
