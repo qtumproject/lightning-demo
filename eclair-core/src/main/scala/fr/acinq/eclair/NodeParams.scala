@@ -159,8 +159,8 @@ object NodeParams {
     require(color.size == 3, "color should be a 3-bytes hex buffer")
 
     val watcherType = config.getString("watcher-type") match {
-      case "electrum" => ELECTRUM
-      case _ => BITCOIND
+      case "bitcoind" => BITCOIND
+      case _ => throw new RuntimeException(s"invalid watcher-type")
     }
 
     val dustLimitSatoshis = config.getLong("dust-limit-satoshis")
