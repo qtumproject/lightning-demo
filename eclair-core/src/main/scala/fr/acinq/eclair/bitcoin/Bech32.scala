@@ -1,4 +1,4 @@
-package fr.acinq.eclair.bitcoin
+package fr.acinq.bitcoin
 
 import scodec.bits.ByteVector
 
