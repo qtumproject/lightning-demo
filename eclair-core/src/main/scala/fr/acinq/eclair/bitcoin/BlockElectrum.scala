@@ -97,8 +97,6 @@ object BlockElectrum extends BtcSerializer[BlockElectrum] {
 
   val RegtestGenesisBlock = LivenetGenesisBlock.copy(header = LivenetGenesisBlock.header.copy(bits = 0x207fffffL, nonce = 2, time = 1296688602))
 
-  val SegnetGenesisBlock = LivenetGenesisBlock.copy(header = LivenetGenesisBlock.header.copy(bits = 503447551, time = 1452831101, nonce = 0))
-
   /**
     * Proof of work: hash(block) <= target difficulty
     *
