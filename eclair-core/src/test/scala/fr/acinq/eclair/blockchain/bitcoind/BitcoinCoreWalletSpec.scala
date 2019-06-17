@@ -153,9 +153,9 @@ class BitcoinCoreWalletSpec extends TestKit(ActorSystem("test")) with BitcoindSe
 
     val fundingTxes = for (i <- 0 to 3) yield {
       val pubkeyScript = Script.write(Script.pay2wsh(Scripts.multiSig2of2(randomKey.publicKey, randomKey.publicKey)))
-      wallet.makeFundingTx(pubkeyScript, MilliBtc(50), 249).pipeTo(sender.ref)
+      wallet.makeFundingTx(pubkeyScript, MilliBtc(50), 99999).pipeTo(sender.ref)
       assert(sender.expectMsgType[Failure].cause.asInstanceOf[JsonRPCError].error.message.contains("Transaction too large for fee policy"))
-      wallet.makeFundingTx(pubkeyScript, MilliBtc(50), 250).pipeTo(sender.ref)
+      wallet.makeFundingTx(pubkeyScript, MilliBtc(50), 100000).pipeTo(sender.ref)
       val MakeFundingTxResponse(fundingTx, _, _) = sender.expectMsgType[MakeFundingTxResponse]
       fundingTx
     }
@@ -215,7 +215,7 @@ class BitcoinCoreWalletSpec extends TestKit(ActorSystem("test")) with BitcoindSe
     assert(sender.expectMsgType[JValue](10 seconds).children.size === 0)
 
     val pubkeyScript = Script.write(Script.pay2wsh(Scripts.multiSig2of2(randomKey.publicKey, randomKey.publicKey)))
-    wallet.makeFundingTx(pubkeyScript, MilliBtc(50), 10000).pipeTo(sender.ref)
+    wallet.makeFundingTx(pubkeyScript, MilliBtc(50), 400000).pipeTo(sender.ref)
     val error = sender.expectMsgType[Failure].cause.asInstanceOf[JsonRPCError].error
     assert(error.message.contains("Please enter the wallet passphrase with walletpassphrase first"))
 
@@ -225,7 +225,7 @@ class BitcoinCoreWalletSpec extends TestKit(ActorSystem("test")) with BitcoindSe
     sender.send(bitcoincli, BitcoinReq("walletpassphrase", walletPassword, 10))
     sender.expectMsgType[JValue]
 
-    wallet.makeFundingTx(pubkeyScript, MilliBtc(50), 10000).pipeTo(sender.ref)
+    wallet.makeFundingTx(pubkeyScript, MilliBtc(50), 400000).pipeTo(sender.ref)
     val MakeFundingTxResponse(fundingTx, _, _) = sender.expectMsgType[MakeFundingTxResponse]
 
     wallet.commit(fundingTx).pipeTo(sender.ref)
@@ -246,7 +246,7 @@ class BitcoinCoreWalletSpec extends TestKit(ActorSystem("test")) with BitcoindSe
     val sender = TestProbe()
 
     // first let's create a tx
-    val address = "n2YKngjUp139nkjKvZGnfLRN6HzzYxJsje"
+    val address = "qeakefR5CdD39ez79LGf2TsSkqKUxW7AQz"
     bitcoinClient.invoke("createrawtransaction", Array.empty, Map(address -> 6)).pipeTo(sender.ref)
     val JString(noinputTx1) = sender.expectMsgType[JString]
     bitcoinClient.invoke("fundrawtransaction", noinputTx1).pipeTo(sender.ref)
