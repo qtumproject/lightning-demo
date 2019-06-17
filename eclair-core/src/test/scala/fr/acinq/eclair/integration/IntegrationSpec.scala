@@ -149,7 +149,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     instantiateEclairNode("F3", ConfigFactory.parseMap(Map("eclair.node-alias" -> "F3", "eclair.expiry-delta-blocks" -> 137, "eclair.server.port" -> 29737, "eclair.api.port" -> 28087, "eclair.payment-handler" -> "noop")).withFallback(commonConfig))
     instantiateEclairNode("F4", ConfigFactory.parseMap(Map("eclair.node-alias" -> "F4", "eclair.expiry-delta-blocks" -> 138, "eclair.server.port" -> 29738, "eclair.api.port" -> 28088, "eclair.payment-handler" -> "noop")).withFallback(commonConfig))
     instantiateEclairNode("F5", ConfigFactory.parseMap(Map("eclair.node-alias" -> "F5", "eclair.expiry-delta-blocks" -> 139, "eclair.server.port" -> 29739, "eclair.api.port" -> 28089, "eclair.payment-handler" -> "noop")).withFallback(commonConfig))
-    instantiateEclairNode("G", ConfigFactory.parseMap(Map("eclair.node-alias" -> "G", "eclair.expiry-delta-blocks" -> 140, "eclair.server.port" -> 29740, "eclair.api.port" -> 28090, "eclair.fee-base-msat" -> 1010, "eclair.fee-proportional-millionths" -> 102)).withFallback(commonConfig))
+    instantiateEclairNode("G", ConfigFactory.parseMap(Map("eclair.node-alias" -> "G", "eclair.expiry-delta-blocks" -> 140, "eclair.server.port" -> 29740, "eclair.api.port" -> 28090, "eclair.fee-base-msat" -> 4010000, "eclair.fee-proportional-millionths" -> 102)).withFallback(commonConfig))
 
     // by default C has a normal payment handler, but this can be overriden in tests
     val paymentHandlerC = nodes("C").system.actorOf(LocalPaymentHandler.props(nodes("C").nodeParams))
@@ -184,19 +184,19 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     val eventListener = TestProbe()
     nodes.values.foreach(_.system.eventStream.subscribe(eventListener.ref, classOf[ChannelStateChanged]))
 
-    connect(nodes("A"), nodes("B"), 11000000, 0)
-    connect(nodes("B"), nodes("C"), 2000000, 0)
-    connect(nodes("C"), nodes("D"), 5000000, 0)
-    connect(nodes("C"), nodes("D"), 5000000, 0)
-    connect(nodes("B"), nodes("E"), 10000000, 0)
-    connect(nodes("E"), nodes("C"), 10000000, 0)
-    connect(nodes("C"), nodes("F1"), 5000000, 0)
-    connect(nodes("C"), nodes("F2"), 5000000, 0)
-    connect(nodes("C"), nodes("F3"), 5000000, 0)
-    connect(nodes("C"), nodes("F4"), 5000000, 0)
-    connect(nodes("C"), nodes("F5"), 5000000, 0)
-    connect(nodes("B"), nodes("G"), 16000000, 0)
-    connect(nodes("G"), nodes("C"), 16000000, 0)
+    connect(nodes("A"), nodes("B"), 1100000000, 0)
+    connect(nodes("B"), nodes("C"), 200000000, 0)
+    connect(nodes("C"), nodes("D"), 500000000, 0)
+    connect(nodes("C"), nodes("D"), 500000000, 0)
+    connect(nodes("B"), nodes("E"), 1000000000, 0)
+    connect(nodes("E"), nodes("C"), 1000000000, 0)
+    connect(nodes("C"), nodes("F1"), 500000000, 0)
+    connect(nodes("C"), nodes("F2"), 500000000, 0)
+    connect(nodes("C"), nodes("F3"), 500000000, 0)
+    connect(nodes("C"), nodes("F4"), 500000000, 0)
+    connect(nodes("C"), nodes("F5"), 500000000, 0)
+    connect(nodes("B"), nodes("G"), 1600000000, 0)
+    connect(nodes("G"), nodes("C"), 1600000000, 0)
 
     val numberOfChannels = 13
     val channelEndpointsCount = 2 * numberOfChannels
