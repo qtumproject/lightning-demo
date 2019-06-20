@@ -79,6 +79,7 @@ class WaitForAcceptChannelStateSpec extends TestkitBaseClass with StateTestsHelp
     awaitCond(alice.stateName == CLOSED)
   }
 
+  /*
   test("recv AcceptChannel (invalid dust limit)", Tag("mainnet")) { f =>
     import f._
     val accept = bob2alice.expectMsgType[AcceptChannel]
@@ -89,6 +90,7 @@ class WaitForAcceptChannelStateSpec extends TestkitBaseClass with StateTestsHelp
     assert(error === Error(accept.temporaryChannelId, DustLimitTooSmall(accept.temporaryChannelId, lowDustLimitSatoshis, Channel.MIN_DUSTLIMIT).getMessage))
     awaitCond(alice.stateName == CLOSED)
   }
+  */
 
   test("recv AcceptChannel (to_self_delay too high)") { f =>
     import f._
