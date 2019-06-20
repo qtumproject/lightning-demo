@@ -50,7 +50,7 @@ object Channel {
 
   // https://github.com/lightningnetwork/lightning-rfc/blob/master/02-peer-protocol.md#requirements
   val MAX_FUNDING_SATOSHIS = 10000000000L // 100 QTUM
-  val MIN_FUNDING_SATOSHIS = 10000000 // 0.1 QTUM
+  val MIN_FUNDING_SATOSHIS = 1000000 // 0.01 QTUM
   val MAX_ACCEPTED_HTLCS = 483
 
   // we don't want the counterparty to use a dust limit lower than that, because they wouldn't only hurt themselves we may need them to publish their commit tx in certain cases (backup/restore)
