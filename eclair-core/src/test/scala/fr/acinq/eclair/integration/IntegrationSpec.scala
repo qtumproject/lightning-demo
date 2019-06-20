@@ -468,7 +468,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     val preimage = randomBytes32
     val paymentHash = Crypto.sha256(preimage)
     // A sends a payment to F
-    val paymentReq = SendPayment(300000000L, paymentHash, nodes("F1").nodeParams.nodeId, maxAttempts = 1, routeParams = integrationTestRouteParams)
+    val paymentReq = SendPayment(3000000000L, paymentHash, nodes("F1").nodeParams.nodeId, maxAttempts = 1, routeParams = integrationTestRouteParams)
     val paymentSender = TestProbe()
     paymentSender.send(nodes("A").paymentInitiator, paymentReq)
     paymentSender.expectMsgType[UUID](30 seconds)
@@ -548,7 +548,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     val preimage = randomBytes32
     val paymentHash = Crypto.sha256(preimage)
     // A sends a payment to F
-    val paymentReq = SendPayment(300000000L, paymentHash, nodes("F2").nodeParams.nodeId, maxAttempts = 1, routeParams = integrationTestRouteParams)
+    val paymentReq = SendPayment(3000000000L, paymentHash, nodes("F2").nodeParams.nodeId, maxAttempts = 1, routeParams = integrationTestRouteParams)
     val paymentSender = TestProbe()
     paymentSender.send(nodes("A").paymentInitiator, paymentReq)
     paymentSender.expectMsgType[UUID](30 seconds)
@@ -625,7 +625,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     val preimage: ByteVector = randomBytes32
     val paymentHash = Crypto.sha256(preimage)
     // A sends a payment to F
-    val paymentReq = SendPayment(300000000L, paymentHash, nodes("F3").nodeParams.nodeId, maxAttempts = 1, routeParams = integrationTestRouteParams)
+    val paymentReq = SendPayment(3000000000L, paymentHash, nodes("F3").nodeParams.nodeId, maxAttempts = 1, routeParams = integrationTestRouteParams)
     val paymentSender = TestProbe()
     paymentSender.send(nodes("A").paymentInitiator, paymentReq)
     val paymentId = paymentSender.expectMsgType[UUID]
@@ -687,7 +687,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     val preimage: ByteVector = randomBytes32
     val paymentHash = Crypto.sha256(preimage)
     // A sends a payment to F
-    val paymentReq = SendPayment(300000000L, paymentHash, nodes("F4").nodeParams.nodeId, maxAttempts = 1, routeParams = integrationTestRouteParams)
+    val paymentReq = SendPayment(3000000000L, paymentHash, nodes("F4").nodeParams.nodeId, maxAttempts = 1, routeParams = integrationTestRouteParams)
     val paymentSender = TestProbe()
     paymentSender.send(nodes("A").paymentInitiator, paymentReq)
     val paymentId = paymentSender.expectMsgType[UUID](30 seconds)
@@ -757,7 +757,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     sender.send(bitcoincli, BitcoinReq("getblockcount"))
     val currentBlockCount = sender.expectMsgType[JValue](10 seconds).extract[Long]
     awaitCond(Globals.blockCount.get() == currentBlockCount, max = 20 seconds, interval = 1 second)
-    // first we send 3 mBTC to F so that it has a balance
+    // first we send 9 mBTC to F so that it has a balance
     val amountMsat = MilliSatoshi(900000000L)
     sender.send(paymentHandlerF, ReceivePayment(Some(amountMsat), "1 coffee"))
     val pr = sender.expectMsgType[PaymentRequest]
@@ -781,19 +781,19 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     }
 
     val buffer = TestProbe()
-    send(300000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
+    send(200000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
     forwardHandlerF.expectMsgType[UpdateAddHtlc]
     forwardHandlerF.forward(buffer.ref)
     sigListener.expectMsgType[ChannelSignatureReceived]
-    send(310000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
+    send(210000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
     forwardHandlerF.expectMsgType[UpdateAddHtlc]
     forwardHandlerF.forward(buffer.ref)
     sigListener.expectMsgType[ChannelSignatureReceived]
-    send(320000000, paymentHandlerC, nodes("F5").paymentInitiator)
+    send(220000000, paymentHandlerC, nodes("F5").paymentInitiator)
     forwardHandlerC.expectMsgType[UpdateAddHtlc]
     forwardHandlerC.forward(buffer.ref)
     sigListener.expectMsgType[ChannelSignatureReceived]
-    send(330000000, paymentHandlerC, nodes("F5").paymentInitiator)
+    send(230000000, paymentHandlerC, nodes("F5").paymentInitiator)
     forwardHandlerC.expectMsgType[UpdateAddHtlc]
     forwardHandlerC.forward(buffer.ref)
     val commitmentsF = sigListener.expectMsgType[ChannelSignatureReceived].commitments
@@ -876,15 +876,18 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
       }
       AnnouncementsBatchValidationSpec.simulateChannel
     }
+    println(1)
     sender.send(bitcoincli, BitcoinReq("generate", 1))
     sender.expectMsgType[JValue](10 seconds)
     logger.info(s"simulated ${channels.size} channels")
-
+    println(2)
     val remoteNodeId = PrivateKey(ByteVector32(ByteVector.fill(32)(1)), true).publicKey
-
+    println(3)
     // then we make the announcements
     val announcements = channels.map(c => AnnouncementsBatchValidationSpec.makeChannelAnnouncement(c))
+    println(4)
     announcements.foreach(ann => nodes("A").router ! PeerRoutingMessage(sender.ref, remoteNodeId, ann))
+    println(5)
     awaitCond({
       sender.send(nodes("D").router, 'channels)
       sender.expectMsgType[Iterable[ChannelAnnouncement]](5 seconds).size == channels.size + 7 // 7 remaining channels because  D->F{1-5} have disappeared

@@ -38,7 +38,7 @@ For more information please visit the [API documentation website](https://acinq.
 
 ### Configuring QTUM Core
 
-:warning: Lightning requires QTUM Core 0.14.0 or higher. If you are upgrading an existing wallet, you need to create a new address and send all your funds to that address.
+:warning: Lightning requires QTUM Core 0.17.0 or higher. If you are upgrading an existing wallet, you need to create a new address and send all your funds to that address.
 
 Lightning needs a _synchronized_, _segwit-ready_, **_zeromq-enabled_**, _wallet-enabled_, _non-pruning_, _tx-indexing_ [QRUM Core](https://github.com/qtumproject/qtum) node. 
 Lightning will use any QTUM it finds in the QTUM Core wallet to fund any channels you choose to open. Lightning will return QTUM from closed channels to this wallet.
@@ -46,6 +46,8 @@ Lightning will use any QTUM it finds in the QTUM Core wallet to fund any channel
 Run bitcoind with the following minimal `qtum.conf`:
 ```
 server=1
+rpcuser=foo
+rpcpassword=bar
 txindex=1
 zmqpubrawblock=tcp://127.0.0.1:29000
 zmqpubrawtx=tcp://127.0.0.1:29000
@@ -53,15 +55,11 @@ zmqpubrawtx=tcp://127.0.0.1:29000
 
 ### Installing Lightning
 
-#### Windows
+Lightning is developed in [Scala](https://www.scala-lang.org/), a powerful functional language that runs on the JVM, and is packaged as a JAR (Java Archive) file. We provide 2 different packages, which internally use the same core libraries:
+* eclair-node, which is a headless application that you can run on servers and desktops, and control from the command line
+* eclair-node-gui, which also includes a JavaFX GUI
 
-Just use the windows installer, it should create a shortcut on your desktop.
-
-#### Linux, macOS or manual install on Windows
-
-You need to first install java, more precisely a [JRE 1.8](http://www.oracle.com/technetwork/java/javase/downloads/jre8-downloads-2133155.html).
-
- :warning: If you are using the OpenJDK JRE, you will need to build OpenJFX yourself, or run the application in headless mode (see below).
+To run Lightning, you first need to install Java, we recommend that you use [OpenJDK 11](https://jdk.java.net/11/). Lightning will also run on Oracle JDK 1.8, Oracle JDK 11, and other versions of OpenJDK but we don't recommend using them.
 
 Then download the latest fat jar and depending on whether or not you want a GUI run the following command:
 * with GUI:
@@ -82,7 +80,6 @@ Lighting reads its configuration file, and write its logs, to `~/.qtum-eclair` b
 To change your node's configuration, create a file named `eclair.conf` in `~/.qtum-eclair`. Here's an example configuration file:
 
 ```
-eclair.chain=testnet
 eclair.node-alias=eclair
 eclair.node-color=49daaa
 ```
