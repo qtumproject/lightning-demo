@@ -413,7 +413,7 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     }
   }
 
-  test("send an HTLC A->B->G->C using heuristics to select the route") {
+  test("send an HTLC A->B->C using heuristics to select the route") {
     val sender = TestProbe()
     // first we retrieve a payment hash from C
     val amountMsat = MilliSatoshi(2000)
@@ -429,8 +429,9 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
       sender.expectMsgType[PaymentResult](10 seconds) match {
         case PaymentFailed(_, _, failures) => failures == Seq.empty // if something went wrong fail with a hint
           // sinece the fee rate dirrerence between qtum and bitcoin, G is not chosen
-          // just skip it first
-        case PaymentSucceeded(_, _, _, _, route) => route.exists(_.nodeId == nodes("B").nodeParams.nodeId)
+        case PaymentSucceeded(_, _, _, _, route) => {
+          route.exists(_.nodeId == nodes("B").nodeParams.nodeId) && !route.exists(_.nodeId == nodes("G").nodeParams.nodeId)
+        }
       }
     }, max = 30 seconds, interval = 10 seconds)
   }
@@ -757,11 +758,11 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     sender.send(bitcoincli, BitcoinReq("getblockcount"))
     val currentBlockCount = sender.expectMsgType[JValue](10 seconds).extract[Long]
     awaitCond(Globals.blockCount.get() == currentBlockCount, max = 20 seconds, interval = 1 second)
-    // first we send 9 mBTC to F so that it has a balance
-    val amountMsat = MilliSatoshi(900000000L)
+    // first we send 3 mBTC to F so that it has a balance
+    val amountMsat = MilliSatoshi(300000000L)
     sender.send(paymentHandlerF, ReceivePayment(Some(amountMsat), "1 coffee"))
     val pr = sender.expectMsgType[PaymentRequest]
-    val sendReq = SendPayment(900000000L, pr.paymentHash, pr.nodeId, routeParams = integrationTestRouteParams, maxAttempts = 1)
+    val sendReq = SendPayment(300000000L, pr.paymentHash, pr.nodeId, routeParams = integrationTestRouteParams, maxAttempts = 1)
     sender.send(nodes("A").paymentInitiator, sendReq)
     val paymentId = sender.expectMsgType[UUID]
     // we forward the htlc to the payment handler
@@ -781,19 +782,19 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
     }
 
     val buffer = TestProbe()
-    send(200000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
+    send(100000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
     forwardHandlerF.expectMsgType[UpdateAddHtlc]
     forwardHandlerF.forward(buffer.ref)
     sigListener.expectMsgType[ChannelSignatureReceived]
-    send(210000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
+    send(110000000, paymentHandlerF, nodes("C").paymentInitiator) // will be left pending
     forwardHandlerF.expectMsgType[UpdateAddHtlc]
     forwardHandlerF.forward(buffer.ref)
     sigListener.expectMsgType[ChannelSignatureReceived]
-    send(220000000, paymentHandlerC, nodes("F5").paymentInitiator)
+    send(120000000, paymentHandlerC, nodes("F5").paymentInitiator)
     forwardHandlerC.expectMsgType[UpdateAddHtlc]
     forwardHandlerC.forward(buffer.ref)
     sigListener.expectMsgType[ChannelSignatureReceived]
-    send(230000000, paymentHandlerC, nodes("F5").paymentInitiator)
+    send(130000000, paymentHandlerC, nodes("F5").paymentInitiator)
     forwardHandlerC.expectMsgType[UpdateAddHtlc]
     forwardHandlerC.forward(buffer.ref)
     val commitmentsF = sigListener.expectMsgType[ChannelSignatureReceived].commitments
@@ -876,18 +877,13 @@ class IntegrationSpec extends TestKit(ActorSystem("test")) with BitcoindService 
       }
       AnnouncementsBatchValidationSpec.simulateChannel
     }
-    println(1)
     sender.send(bitcoincli, BitcoinReq("generate", 1))
     sender.expectMsgType[JValue](10 seconds)
     logger.info(s"simulated ${channels.size} channels")
-    println(2)
     val remoteNodeId = PrivateKey(ByteVector32(ByteVector.fill(32)(1)), true).publicKey
-    println(3)
     // then we make the announcements
     val announcements = channels.map(c => AnnouncementsBatchValidationSpec.makeChannelAnnouncement(c))
-    println(4)
     announcements.foreach(ann => nodes("A").router ! PeerRoutingMessage(sender.ref, remoteNodeId, ann))
-    println(5)
     awaitCond({
       sender.send(nodes("D").router, 'channels)
       sender.expectMsgType[Iterable[ChannelAnnouncement]](5 seconds).size == channels.size + 7 // 7 remaining channels because  D->F{1-5} have disappeared
