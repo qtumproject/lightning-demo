@@ -49,6 +49,7 @@ server=1
 rpcuser=foo
 rpcpassword=bar
 txindex=1
+addresstype=bech32
 zmqpubrawblock=tcp://127.0.0.1:29000
 zmqpubrawtx=tcp://127.0.0.1:29000
 ```
@@ -193,6 +194,7 @@ so you can easily run your bitcoin node on both mainnet and testnet. For example
 ```
 server=1
 txindex=1
+addresstype=bech32
 [main]
 rpcuser=<your-mainnet-rpc-user-here>
 rpcpassword=<your-mainnet-rpc-password-here>
