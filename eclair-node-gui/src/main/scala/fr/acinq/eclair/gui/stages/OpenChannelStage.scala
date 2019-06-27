@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,13 +16,12 @@
 
 package fr.acinq.eclair.gui.stages
 
+import fr.acinq.eclair.gui.Handlers
+import fr.acinq.eclair.gui.controllers.OpenChannelController
 import javafx.fxml.FXMLLoader
 import javafx.scene.image.Image
 import javafx.scene.{Parent, Scene}
 import javafx.stage.{Modality, Stage, StageStyle}
-
-import fr.acinq.eclair.gui.Handlers
-import fr.acinq.eclair.gui.controllers.OpenChannelController
 
 /**
   * Created by PM on 16/08/2016.

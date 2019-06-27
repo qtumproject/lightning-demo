@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,8 +21,8 @@ import scala.concurrent.Future
 /**
   * Created by PM on 09/07/2017.
   */
-class ConstantFeeProvider(feerates: FeeratesPerByte) extends FeeProvider {
+class ConstantFeeProvider(feerates: FeeratesPerKB) extends FeeProvider {
 
-  override def getFeerates: Future[FeeratesPerByte] = Future.successful(feerates)
+  override def getFeerates: Future[FeeratesPerKB] = Future.successful(feerates)
 
 }

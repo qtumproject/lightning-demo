@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,12 @@
 
 package fr.acinq.eclair
 
-import org.junit.runner.RunWith
 import org.scalatest.FunSuite
-import org.scalatest.junit.JUnitRunner
+
+import scala.util.Try
 
 
-@RunWith(classOf[JUnitRunner])
+
 class ShortChannelIdSpec extends FunSuite {
 
   test("handle values from 0 to 0xffffffffffff") {
@@ -41,4 +41,21 @@ class ShortChannelIdSpec extends FunSuite {
     }
   }
 
+  test("human readable format as per spec") {
+    assert(ShortChannelId(0x0000a41000001b0003L).toString == "42000x27x3")
+  }
+
+  test("parse a short channel it") {
+    assert(ShortChannelId("42000x27x3").toLong == 0x0000a41000001b0003L)
+  }
+
+  test("fail parsing a short channel id if not in the required form") {
+    assert(Try(ShortChannelId("42000x27x3.1")).isFailure)
+    assert(Try(ShortChannelId("4200aa0x27x3")).isFailure)
+    assert(Try(ShortChannelId("4200027x3")).isFailure)
+    assert(Try(ShortChannelId("42000x27ax3")).isFailure)
+    assert(Try(ShortChannelId("42000x27x")).isFailure)
+    assert(Try(ShortChannelId("42000x27")).isFailure)
+    assert(Try(ShortChannelId("42000x")).isFailure)
+  }
 }

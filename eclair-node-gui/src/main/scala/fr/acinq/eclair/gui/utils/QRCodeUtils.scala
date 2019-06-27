@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,12 +16,11 @@
 
 package fr.acinq.eclair.gui.utils
 
-import javafx.scene.image.WritableImage
-import javafx.scene.paint.Color
-
-import com.google.zxing.{BarcodeFormat, EncodeHintType}
 import com.google.zxing.qrcode.QRCodeWriter
 import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
+import com.google.zxing.{BarcodeFormat, EncodeHintType}
+import javafx.scene.image.WritableImage
+import javafx.scene.paint.Color
 
 /**
   * Created by DPA on 22/12/2017.

@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,15 +16,13 @@
 
 package fr.acinq.eclair.blockchain.fee
 
-import org.junit.runner.RunWith
 import org.scalatest.FunSuite
-import org.scalatest.junit.JUnitRunner
 
 import scala.concurrent.duration._
 import scala.concurrent.{Await, Future}
 import scala.util.Random
 
-@RunWith(classOf[JUnitRunner])
+
 class FallbackFeeProviderSpec extends FunSuite {
 
   import scala.concurrent.ExecutionContext.Implicits.global
@@ -33,19 +31,19 @@ class FallbackFeeProviderSpec extends FunSuite {
     * This provider returns a constant value, but fails after ttl tries
     *
     * @param ttl
-    * @param feeratesPerByte
+    * @param feeratesPerKB
     */
-  class FailingFeeProvider(ttl: Int, val feeratesPerByte: FeeratesPerByte) extends FeeProvider {
+  class FailingFeeProvider(ttl: Int, val feeratesPerKB: FeeratesPerKB) extends FeeProvider {
     var i = 0
 
-    override def getFeerates: Future[FeeratesPerByte] =
+    override def getFeerates: Future[FeeratesPerKB] =
       if (i < ttl) {
         i = i + 1
-        Future.successful(feeratesPerByte)
+        Future.successful(feeratesPerKB)
       } else Future.failed(new RuntimeException())
   }
 
-  def dummyFeerates = FeeratesPerByte(Random.nextInt(10000), Random.nextInt(10000), Random.nextInt(10000), Random.nextInt(10000), Random.nextInt(10000), Random.nextInt(10000))
+  def dummyFeerates = FeeratesPerKB(1000 + Random.nextInt(10000), 1000 + Random.nextInt(10000), 1000 + Random.nextInt(10000), 1000 + Random.nextInt(10000), 1000 + Random.nextInt(10000), 1000 + Random.nextInt(10000))
 
   def await[T](f: Future[T]): T = Await.result(f, 3 seconds)
 
@@ -58,26 +56,26 @@ class FallbackFeeProviderSpec extends FunSuite {
 
     val fallbackFeeProvider = new FallbackFeeProvider(provider0 :: provider1 :: provider3 :: provider5 :: provider7 :: Nil, 1)
 
-    assert(await(fallbackFeeProvider.getFeerates) === provider1.feeratesPerByte)
+    assert(await(fallbackFeeProvider.getFeerates) === provider1.feeratesPerKB)
 
-    assert(await(fallbackFeeProvider.getFeerates) === provider3.feeratesPerByte)
-    assert(await(fallbackFeeProvider.getFeerates) === provider3.feeratesPerByte)
-    assert(await(fallbackFeeProvider.getFeerates) === provider3.feeratesPerByte)
+    assert(await(fallbackFeeProvider.getFeerates) === provider3.feeratesPerKB)
+    assert(await(fallbackFeeProvider.getFeerates) === provider3.feeratesPerKB)
+    assert(await(fallbackFeeProvider.getFeerates) === provider3.feeratesPerKB)
 
-    assert(await(fallbackFeeProvider.getFeerates) === provider5.feeratesPerByte)
-    assert(await(fallbackFeeProvider.getFeerates) === provider5.feeratesPerByte)
-    assert(await(fallbackFeeProvider.getFeerates) === provider5.feeratesPerByte)
-    assert(await(fallbackFeeProvider.getFeerates) === provider5.feeratesPerByte)
-    assert(await(fallbackFeeProvider.getFeerates) === provider5.feeratesPerByte)
+    assert(await(fallbackFeeProvider.getFeerates) === provider5.feeratesPerKB)
+    assert(await(fallbackFeeProvider.getFeerates) === provider5.feeratesPerKB)
+    assert(await(fallbackFeeProvider.getFeerates) === provider5.feeratesPerKB)
+    assert(await(fallbackFeeProvider.getFeerates) === provider5.feeratesPerKB)
+    assert(await(fallbackFeeProvider.getFeerates) === provider5.feeratesPerKB)
 
-    assert(await(fallbackFeeProvider.getFeerates) === provider7.feeratesPerByte)
+    assert(await(fallbackFeeProvider.getFeerates) === provider7.feeratesPerKB)
 
   }
 
   test("ensure minimum feerate") {
-    val constantFeeProvider = new ConstantFeeProvider(FeeratesPerByte(1, 1, 1, 1, 1, 1))
+    val constantFeeProvider = new ConstantFeeProvider(FeeratesPerKB(1000, 1000, 1000, 1000, 1000, 1000))
     val fallbackFeeProvider = new FallbackFeeProvider(constantFeeProvider :: Nil, 2)
-    assert(await(fallbackFeeProvider.getFeerates) === FeeratesPerByte(2, 2, 2, 2, 2, 2))
+    assert(await(fallbackFeeProvider.getFeerates) === FeeratesPerKB(2000, 2000, 2000, 2000, 2000, 2000))
   }
 
 

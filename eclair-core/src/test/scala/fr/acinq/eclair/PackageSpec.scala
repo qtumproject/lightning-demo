@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,30 +17,30 @@
 package fr.acinq.eclair
 
 import fr.acinq.bitcoin.Crypto.PrivateKey
-import fr.acinq.bitcoin.{Base58, Base58Check, Bech32, BinaryData, Block, Crypto, Script}
-import org.junit.runner.RunWith
+import fr.acinq.bitcoin.{Base58, Base58Check, Bech32, Block, ByteVector32, Crypto, Script}
 import org.scalatest.FunSuite
-import org.scalatest.junit.JUnitRunner
+import scodec.bits._
 
 import scala.util.Try
 
 /**
   * Created by PM on 27/01/2017.
   */
-@RunWith(classOf[JUnitRunner])
+
 class PackageSpec extends FunSuite {
 
   test("compute long channel id") {
-    val data = (BinaryData("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"), 0, BinaryData("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF")) ::
-      (BinaryData("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF"), 1, BinaryData("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE")) ::
-      (BinaryData("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000"), 2, BinaryData("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0002")) ::
-      (BinaryData("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00F0"), 0x0F00, BinaryData("FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0FF0")) :: Nil
+    val data = ((hex"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 0, hex"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF") ::
+      (hex"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF", 1, hex"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFE") ::
+      (hex"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0000", 2, hex"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0002") ::
+      (hex"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF00F0", 0x0F00, hex"FFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF0FF0") :: Nil)
+        .map(x => (ByteVector32(x._1), x._2, ByteVector32(x._3)))
 
-    data.foreach(x => assert(toLongId(x._1, x._2) === x._3))
+    data.foreach(x => assert(toLongId(ByteVector32(x._1), x._2) === x._3))
   }
 
   test("decode base58 addresses") {
-    val priv = PrivateKey(BinaryData("01" * 32), compressed = true)
+    val priv = PrivateKey(ByteVector32(ByteVector.fill(32)(1)), compressed = true)
     val pub = priv.publicKey
 
     // p2pkh
@@ -71,28 +71,28 @@ class PackageSpec extends FunSuite {
   }
 
   test("decode bech32 addresses") {
-    val priv = PrivateKey(BinaryData("01" * 32), compressed = true)
+    val priv = PrivateKey(ByteVector32(ByteVector.fill(32)(1)), compressed = true)
     val pub = priv.publicKey
 
     // p2wpkh
-    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("bc", 0, pub.hash160), Block.LivenetGenesisBlock.hash) == Script.pay2wpkh(pub))
-    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("tb", 0, pub.hash160), Block.TestnetGenesisBlock.hash) == Script.pay2wpkh(pub))
-    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("bcrt", 0, pub.hash160), Block.RegtestGenesisBlock.hash) == Script.pay2wpkh(pub))
+    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("qc", 0, pub.hash160), Block.LivenetGenesisBlock.hash) == Script.pay2wpkh(pub))
+    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("tq", 0, pub.hash160), Block.TestnetGenesisBlock.hash) == Script.pay2wpkh(pub))
+    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("qcrt", 0, pub.hash160), Block.RegtestGenesisBlock.hash) == Script.pay2wpkh(pub))
 
     // wrong version
-    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("bc", 1, pub.hash160), Block.LivenetGenesisBlock.hash)).isFailure)
-    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("tb", 1, pub.hash160), Block.TestnetGenesisBlock.hash)).isFailure)
-    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("bcrt", 1, pub.hash160), Block.RegtestGenesisBlock.hash)).isFailure)
+    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("qc", 1, pub.hash160), Block.LivenetGenesisBlock.hash)).isFailure)
+    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("tq", 1, pub.hash160), Block.TestnetGenesisBlock.hash)).isFailure)
+    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("qcrt", 1, pub.hash160), Block.RegtestGenesisBlock.hash)).isFailure)
 
     // wrong chain
-    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("bc", 0, pub.hash160), Block.TestnetGenesisBlock.hash)).isFailure)
-    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("tb", 0, pub.hash160), Block.LivenetGenesisBlock.hash)).isFailure)
-    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("bcrt", 0, pub.hash160), Block.LivenetGenesisBlock.hash)).isFailure)
+    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("qc", 0, pub.hash160), Block.TestnetGenesisBlock.hash)).isFailure)
+    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("tq", 0, pub.hash160), Block.LivenetGenesisBlock.hash)).isFailure)
+    assert(Try(addressToPublicKeyScript(Bech32.encodeWitnessAddress("qcrt", 0, pub.hash160), Block.LivenetGenesisBlock.hash)).isFailure)
 
     val script = Script.write(Script.pay2wpkh(pub))
-    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("bc", 0, Crypto.sha256(script)), Block.LivenetGenesisBlock.hash) == Script.pay2wsh(script))
-    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("tb", 0, Crypto.sha256(script)), Block.TestnetGenesisBlock.hash) == Script.pay2wsh(script))
-    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("bcrt", 0, Crypto.sha256(script)), Block.RegtestGenesisBlock.hash) == Script.pay2wsh(script))
+    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("qc", 0, Crypto.sha256(script)), Block.LivenetGenesisBlock.hash) == Script.pay2wsh(script))
+    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("tq", 0, Crypto.sha256(script)), Block.TestnetGenesisBlock.hash) == Script.pay2wsh(script))
+    assert(addressToPublicKeyScript(Bech32.encodeWitnessAddress("qcrt", 0, Crypto.sha256(script)), Block.RegtestGenesisBlock.hash) == Script.pay2wsh(script))
   }
 
   test("fail to decode invalid addresses") {
@@ -100,5 +100,17 @@ class PackageSpec extends FunSuite {
       addressToPublicKeyScript("1Qbbbbb", Block.LivenetGenesisBlock.hash)
     }
     assert(e.getMessage.contains("is neither a valid Base58 address") && e.getMessage.contains("nor a valid Bech32 address"))
+  }
+
+  test("convert fee rates and enforce a minimum feerate-per-kw") {
+    assert(feerateByte2Kw(1) == MinimumFeeratePerKw)
+    assert(feerateKB2Kw(1000) == MinimumFeeratePerKw)
+  }
+
+  test("compare short channel ids as unsigned longs") {
+    assert(ShortChannelId(Long.MinValue - 1) < ShortChannelId(Long.MinValue))
+    assert(ShortChannelId(Long.MinValue) < ShortChannelId(Long.MinValue + 1))
+    assert(ShortChannelId(Long.MaxValue - 1) < ShortChannelId(Long.MaxValue))
+    assert(ShortChannelId(Long.MaxValue) < ShortChannelId(Long.MaxValue + 1))
   }
 }

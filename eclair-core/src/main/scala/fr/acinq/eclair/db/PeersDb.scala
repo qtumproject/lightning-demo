@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,16 +16,17 @@
 
 package fr.acinq.eclair.db
 
-import java.net.InetSocketAddress
-
 import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.eclair.wire.NodeAddress
 
 trait PeersDb {
 
-  def addOrUpdatePeer(nodeId: PublicKey, address: InetSocketAddress)
+  def addOrUpdatePeer(nodeId: PublicKey, address: NodeAddress)
 
   def removePeer(nodeId: PublicKey)
 
-  def listPeers(): Map[PublicKey, InetSocketAddress]
+  def listPeers(): Map[PublicKey, NodeAddress]
+
+  def close(): Unit
 
 }

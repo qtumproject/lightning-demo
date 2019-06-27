@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -21,15 +21,20 @@ import fr.acinq.bitcoin.Crypto.{Point, PrivateKey, PublicKey, Scalar, ripemd160,
 import fr.acinq.bitcoin.Script._
 import fr.acinq.bitcoin.{OutPoint, _}
 import fr.acinq.eclair.blockchain.EclairWallet
+import fr.acinq.eclair.channel.Channel.REFRESH_CHANNEL_UPDATE_INTERVAL
 import fr.acinq.eclair.crypto.{Generators, KeyManager}
 import fr.acinq.eclair.db.ChannelsDb
+import fr.acinq.eclair.payment.{Local, Origin}
 import fr.acinq.eclair.transactions.Scripts._
 import fr.acinq.eclair.transactions.Transactions._
 import fr.acinq.eclair.transactions._
 import fr.acinq.eclair.wire._
 import fr.acinq.eclair.{Globals, NodeParams, ShortChannelId, addressToPublicKeyScript}
+import scodec.bits.ByteVector
 
+import scala.compat.Platform
 import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.util.{Failure, Success, Try}
 
 /**
@@ -42,10 +47,10 @@ object Helpers {
     * Depending on the state, returns the current temporaryChannelId or channelId
     *
     * @param stateData
-    * @return
+    * @return the long identifier of the channel
     */
-  def getChannelId(stateData: Data): BinaryData = stateData match {
-    case Nothing => BinaryData("00" * 32)
+  def getChannelId(stateData: Data): ByteVector32 = stateData match {
+    case Nothing => ByteVector32.Zeroes
     case d: DATA_WAIT_FOR_OPEN_CHANNEL => d.initFundee.temporaryChannelId
     case d: DATA_WAIT_FOR_ACCEPT_CHANNEL => d.initFunder.temporaryChannelId
     case d: DATA_WAIT_FOR_FUNDING_INTERNAL => d.temporaryChannelId
@@ -55,19 +60,67 @@ object Helpers {
   }
 
   /**
+    * We update local/global features at reconnection
+    *
+    * @param data
+    * @return
+    */
+  def updateFeatures(data: HasCommitments, localInit: Init, remoteInit: Init): HasCommitments = {
+    val commitments1 = data.commitments.copy(
+      localParams = data.commitments.localParams.copy(globalFeatures = localInit.globalFeatures, localFeatures = localInit.localFeatures),
+      remoteParams = data.commitments.remoteParams.copy(globalFeatures = remoteInit.globalFeatures, localFeatures = remoteInit.localFeatures))
+    data match {
+      case d: DATA_WAIT_FOR_FUNDING_CONFIRMED => d.copy(commitments = commitments1)
+      case d: DATA_WAIT_FOR_FUNDING_LOCKED => d.copy(commitments = commitments1)
+      case d: DATA_NORMAL => d.copy(commitments = commitments1)
+      case d: DATA_SHUTDOWN => d.copy(commitments = commitments1)
+      case d: DATA_NEGOTIATING => d.copy(commitments = commitments1)
+      case d: DATA_CLOSING => d.copy(commitments = commitments1)
+      case d: DATA_WAIT_FOR_REMOTE_PUBLISH_FUTURE_COMMITMENT => d.copy(commitments = commitments1)
+    }
+  }
+
+  /**
     * Called by the fundee
     */
   def validateParamsFundee(nodeParams: NodeParams, open: OpenChannel): Unit = {
+    // BOLT #2: if the chain_hash value, within the open_channel, message is set to a hash of a chain that is unknown to the receiver:
+    // MUST reject the channel.
     if (nodeParams.chainHash != open.chainHash) throw InvalidChainHash(open.temporaryChannelId, local = nodeParams.chainHash, remote = open.chainHash)
-    if (open.fundingSatoshis < Channel.MIN_FUNDING_SATOSHIS || open.fundingSatoshis >= Channel.MAX_FUNDING_SATOSHIS) throw InvalidFundingAmount(open.temporaryChannelId, open.fundingSatoshis, Channel.MIN_FUNDING_SATOSHIS, Channel.MAX_FUNDING_SATOSHIS)
+    if (open.fundingSatoshis < nodeParams.minFundingSatoshis || open.fundingSatoshis >= Channel.MAX_FUNDING_SATOSHIS) throw InvalidFundingAmount(open.temporaryChannelId, open.fundingSatoshis, nodeParams.minFundingSatoshis, Channel.MAX_FUNDING_SATOSHIS)
+
+    // BOLT #2: The receiving node MUST fail the channel if: push_msat is greater than funding_satoshis * 1000.
     if (open.pushMsat > 1000 * open.fundingSatoshis) throw InvalidPushAmount(open.temporaryChannelId, open.pushMsat, 1000 * open.fundingSatoshis)
+
+    // BOLT #2: The receiving node MUST fail the channel if: to_self_delay is unreasonably large.
+    if (open.toSelfDelay > Channel.MAX_TO_SELF_DELAY || open.toSelfDelay > nodeParams.maxToLocalDelayBlocks) throw ToSelfDelayTooHigh(open.temporaryChannelId, open.toSelfDelay, nodeParams.maxToLocalDelayBlocks)
+
+    // BOLT #2: The receiving node MUST fail the channel if: max_accepted_htlcs is greater than 483.
+    if (open.maxAcceptedHtlcs > Channel.MAX_ACCEPTED_HTLCS) throw InvalidMaxAcceptedHtlcs(open.temporaryChannelId, open.maxAcceptedHtlcs, Channel.MAX_ACCEPTED_HTLCS)
+
+    // BOLT #2: The receiving node MUST fail the channel if: push_msat is greater than funding_satoshis * 1000.
+    if (isFeeTooSmall(open.feeratePerKw)) throw FeerateTooSmall(open.temporaryChannelId, open.feeratePerKw)
+
+    // BOLT #2: The receiving node MUST fail the channel if: dust_limit_satoshis is greater than channel_reserve_satoshis.
+    if (open.dustLimitSatoshis > open.channelReserveSatoshis) throw DustLimitTooLarge(open.temporaryChannelId, open.dustLimitSatoshis, open.channelReserveSatoshis)
+
+    // BOLT #2: The receiving node MUST fail the channel if both to_local and to_remote amounts for the initial commitment
+    // transaction are less than or equal to channel_reserve_satoshis (see BOLT 3).
+    val (toLocalMsat, toRemoteMsat) = (open.pushMsat, open.fundingSatoshis * 1000 - open.pushMsat)
+    if (toLocalMsat < open.channelReserveSatoshis * 1000 && toRemoteMsat < open.channelReserveSatoshis * 1000) {
+      throw ChannelReserveNotMet(open.temporaryChannelId, toLocalMsat, toRemoteMsat, open.channelReserveSatoshis)
+    }
+
     val localFeeratePerKw = Globals.feeratesPerKw.get.blocks_2
     if (isFeeDiffTooHigh(open.feeratePerKw, localFeeratePerKw, nodeParams.maxFeerateMismatch)) throw FeerateTooDifferent(open.temporaryChannelId, localFeeratePerKw, open.feeratePerKw)
     // only enforce dust limit check on mainnet
     if (nodeParams.chainHash == Block.LivenetGenesisBlock.hash) {
-      if (open.dustLimitSatoshis < Channel.MIN_DUSTLIMIT) throw InvalidDustLimit(open.temporaryChannelId, open.dustLimitSatoshis, Channel.MIN_DUSTLIMIT)
+      if (open.dustLimitSatoshis < Channel.MIN_DUSTLIMIT) throw DustLimitTooSmall(open.temporaryChannelId, open.dustLimitSatoshis, Channel.MIN_DUSTLIMIT)
     }
-    if (open.toSelfDelay > nodeParams.maxToLocalDelayBlocks) throw ToSelfDelayTooHigh(open.temporaryChannelId, open.toSelfDelay, nodeParams.maxToLocalDelayBlocks)
+
+    // we don't check that the funder's amount for the initial commitment transaction is sufficient for full fee payment
+    // now, but it will be done later when we receive `funding_created`
+
     val reserveToFundingRatio = open.channelReserveSatoshis.toDouble / Math.max(open.fundingSatoshis, 1)
     if (reserveToFundingRatio > nodeParams.maxReserveToFundingRatio) throw ChannelReserveTooHigh(open.temporaryChannelId, open.channelReserveSatoshis, reserveToFundingRatio, nodeParams.maxReserveToFundingRatio)
   }
@@ -79,11 +132,42 @@ object Helpers {
     if (accept.maxAcceptedHtlcs > Channel.MAX_ACCEPTED_HTLCS) throw InvalidMaxAcceptedHtlcs(accept.temporaryChannelId, accept.maxAcceptedHtlcs, Channel.MAX_ACCEPTED_HTLCS)
     // only enforce dust limit check on mainnet
     if (nodeParams.chainHash == Block.LivenetGenesisBlock.hash) {
-      if (accept.dustLimitSatoshis < Channel.MIN_DUSTLIMIT) throw InvalidDustLimit(accept.temporaryChannelId, accept.dustLimitSatoshis, Channel.MIN_DUSTLIMIT)
+      if (accept.dustLimitSatoshis < Channel.MIN_DUSTLIMIT) throw DustLimitTooSmall(accept.temporaryChannelId, accept.dustLimitSatoshis, Channel.MIN_DUSTLIMIT)
     }
-    if (accept.toSelfDelay > nodeParams.maxToLocalDelayBlocks) throw ToSelfDelayTooHigh(accept.temporaryChannelId, accept.toSelfDelay, nodeParams.maxToLocalDelayBlocks)
+
+    // BOLT #2: The receiving node MUST fail the channel if: dust_limit_satoshis is greater than channel_reserve_satoshis.
+    if (accept.dustLimitSatoshis > accept.channelReserveSatoshis) throw DustLimitTooLarge(accept.temporaryChannelId, accept.dustLimitSatoshis, accept.channelReserveSatoshis)
+
+    // if minimum_depth is unreasonably large:
+    // MAY reject the channel.
+    if (accept.toSelfDelay > Channel.MAX_TO_SELF_DELAY || accept.toSelfDelay > nodeParams.maxToLocalDelayBlocks) throw ToSelfDelayTooHigh(accept.temporaryChannelId, accept.toSelfDelay, nodeParams.maxToLocalDelayBlocks)
+
+    // if channel_reserve_satoshis is less than dust_limit_satoshis within the open_channel message:
+    //  MUST reject the channel.
+    if (accept.channelReserveSatoshis < open.dustLimitSatoshis) throw ChannelReserveBelowOurDustLimit(accept.temporaryChannelId, accept.channelReserveSatoshis, open.dustLimitSatoshis)
+
+    // if channel_reserve_satoshis from the open_channel message is less than dust_limit_satoshis:
+    // MUST reject the channel. Other fields have the same requirements as their counterparts in open_channel.
+    if (open.channelReserveSatoshis < accept.dustLimitSatoshis) throw DustLimitAboveOurChannelReserve(accept.temporaryChannelId, accept.dustLimitSatoshis, open.channelReserveSatoshis)
+
     val reserveToFundingRatio = accept.channelReserveSatoshis.toDouble / Math.max(open.fundingSatoshis, 1)
     if (reserveToFundingRatio > nodeParams.maxReserveToFundingRatio) throw ChannelReserveTooHigh(open.temporaryChannelId, accept.channelReserveSatoshis, reserveToFundingRatio, nodeParams.maxReserveToFundingRatio)
+  }
+
+  /**
+    * Compute the delay until we need to refresh the channel_update for our channel not to be considered stale by
+    * other nodes.
+    *
+    * If current update more than [[Channel.REFRESH_CHANNEL_UPDATE_INTERVAL]] old then the delay will be zero.
+    *
+    * @param currentUpdateTimestamp
+    * @return the delay until the next update
+    */
+  def nextChannelUpdateRefresh(currentUpdateTimestamp: Long)(implicit log: LoggingAdapter): FiniteDuration = {
+    val age = Platform.currentTime.milliseconds - currentUpdateTimestamp.seconds
+    val delay = 0.days.max(REFRESH_CHANNEL_UPDATE_INTERVAL - age)
+    log.info("current channel_update was created {} days ago, will refresh it in {} days", age.toDays, delay.toDays)
+    delay
   }
 
   /**
@@ -96,7 +180,7 @@ object Helpers {
     Math.abs((2.0 * (remoteFeeratePerKw - localFeeratePerKw)) / (localFeeratePerKw + remoteFeeratePerKw))
 
   def shouldUpdateFee(commitmentFeeratePerKw: Long, networkFeeratePerKw: Long, updateFeeMinDiffRatio: Double): Boolean =
-  feeRateMismatch(networkFeeratePerKw, commitmentFeeratePerKw) > updateFeeMinDiffRatio
+    feeRateMismatch(networkFeeratePerKw, commitmentFeeratePerKw) > updateFeeMinDiffRatio
 
   /**
     *
@@ -109,13 +193,39 @@ object Helpers {
   def isFeeDiffTooHigh(remoteFeeratePerKw: Long, localFeeratePerKw: Long, maxFeerateMismatchRatio: Double): Boolean =
     feeRateMismatch(remoteFeeratePerKw, localFeeratePerKw) > maxFeerateMismatchRatio
 
+  /**
+    *
+    * @param remoteFeeratePerKw remote fee rate per kiloweight
+    * @return true if the remote fee rate is too small
+    */
+  def isFeeTooSmall(remoteFeeratePerKw: Long): Boolean = {
+    remoteFeeratePerKw < fr.acinq.eclair.MinimumFeeratePerKw
+  }
+
   def makeAnnouncementSignatures(nodeParams: NodeParams, commitments: Commitments, shortChannelId: ShortChannelId) = {
-    val features = BinaryData.empty // empty features for now
+    val features = ByteVector.empty // empty features for now
     val (localNodeSig, localBitcoinSig) = nodeParams.keyManager.signChannelAnnouncement(commitments.localParams.channelKeyPath, nodeParams.chainHash, shortChannelId, commitments.remoteParams.nodeId, commitments.remoteParams.fundingPubKey, features)
     AnnouncementSignatures(commitments.channelId, shortChannelId, localNodeSig, localBitcoinSig)
   }
 
-  def getFinalScriptPubKey(wallet: EclairWallet, chainHash: BinaryData): BinaryData = {
+  /**
+    * This indicates whether our side of the channel is above the reserve requested by our counterparty. In other words,
+    * this tells if we can use the channel to make a payment.
+    *
+    */
+  def aboveReserve(commitments: Commitments)(implicit log: LoggingAdapter): Boolean = {
+    val remoteCommit = commitments.remoteNextCommitInfo match {
+      case Left(waitingForRevocation) => waitingForRevocation.nextRemoteCommit
+      case _ => commitments.remoteCommit
+    }
+    val toRemoteSatoshis = remoteCommit.spec.toRemoteMsat / 1000
+    // NB: this is an approximation (we don't take network fees into account)
+    val result = toRemoteSatoshis > commitments.remoteParams.channelReserveSatoshis
+    log.debug(s"toRemoteSatoshis=$toRemoteSatoshis reserve=${commitments.remoteParams.channelReserveSatoshis} aboveReserve=$result for remoteCommitNumber=${remoteCommit.index}")
+    result
+  }
+
+  def getFinalScriptPubKey(wallet: EclairWallet, chainHash: ByteVector32): ByteVector = {
     import scala.concurrent.duration._
     val finalAddress = Await.result(wallet.getFinalAddress, 40 seconds)
 
@@ -124,7 +234,7 @@ object Helpers {
 
   object Funding {
 
-    def makeFundingInputInfo(fundingTxId: BinaryData, fundingTxOutputIndex: Int, fundingSatoshis: Satoshi, fundingPubkey1: PublicKey, fundingPubkey2: PublicKey): InputInfo = {
+    def makeFundingInputInfo(fundingTxId: ByteVector32, fundingTxOutputIndex: Int, fundingSatoshis: Satoshi, fundingPubkey1: PublicKey, fundingPubkey2: PublicKey): InputInfo = {
       val fundingScript = multiSig2of2(fundingPubkey1, fundingPubkey2)
       val fundingTxOut = TxOut(fundingSatoshis, pay2wsh(fundingScript))
       InputInfo(OutPoint(fundingTxId, fundingTxOutputIndex), fundingTxOut, write(fundingScript))
@@ -141,7 +251,7 @@ object Helpers {
       * @param remoteFirstPerCommitmentPoint
       * @return (localSpec, localTx, remoteSpec, remoteTx, fundingTxOutput)
       */
-    def makeFirstCommitTxs(keyManager: KeyManager, temporaryChannelId: BinaryData, localParams: LocalParams, remoteParams: RemoteParams, fundingSatoshis: Long, pushMsat: Long, initialFeeratePerKw: Long, fundingTxHash: BinaryData, fundingTxOutputIndex: Int, remoteFirstPerCommitmentPoint: Point, maxFeerateMismatch: Double): (CommitmentSpec, CommitTx, CommitmentSpec, CommitTx) = {
+    def makeFirstCommitTxs(keyManager: KeyManager, temporaryChannelId: ByteVector32, localParams: LocalParams, remoteParams: RemoteParams, fundingSatoshis: Long, pushMsat: Long, initialFeeratePerKw: Long, fundingTxHash: ByteVector32, fundingTxOutputIndex: Int, remoteFirstPerCommitmentPoint: Point, maxFeerateMismatch: Double): (CommitmentSpec, CommitTx, CommitmentSpec, CommitTx) = {
       val toLocalMsat = if (localParams.isFunder) fundingSatoshis * 1000 - pushMsat else pushMsat
       val toRemoteMsat = if (localParams.isFunder) pushMsat else fundingSatoshis * 1000 - pushMsat
 
@@ -166,14 +276,135 @@ object Helpers {
       (localSpec, localCommitTx, remoteSpec, remoteCommitTx)
     }
 
+    /**
+      * This will return a delay, taking into account how much we already waited, and giving some slack
+      *
+      * @param now          current timet
+      * @param waitingSince we have been waiting since that time
+      * @param delay        the nominal delay that we were supposed to wait
+      * @param minDelay     the minimum delay even if the nominal one has expired
+      * @return the delay we will actually wait
+      */
+    def computeFundingTimeout(now: Long, waitingSince: Long, delay: FiniteDuration, minDelay: FiniteDuration): FiniteDuration = {
+      import scala.concurrent.duration._
+      val a = waitingSince seconds
+      val b = now seconds
+      val d = delay - (b - a)
+      d.max(minDelay)
+    }
+
   }
+
+  /**
+    * Tells whether or not their expected next remote commitment number matches with our data
+    *
+    * @param d
+    * @param nextRemoteRevocationNumber
+    * @return
+    *         - true if parties are in sync or remote is behind
+    *         - false if we are behind
+    */
+  def checkLocalCommit(d: HasCommitments, nextRemoteRevocationNumber: Long): Boolean = {
+    if (d.commitments.localCommit.index == nextRemoteRevocationNumber) {
+      // they just sent a new commit_sig, we have received it but they didn't receive our revocation
+      true
+    } else if (d.commitments.localCommit.index == nextRemoteRevocationNumber + 1) {
+      // we are in sync
+      true
+    } else if (d.commitments.localCommit.index > nextRemoteRevocationNumber + 1) {
+      // remote is behind: we return true because things are fine on our side
+      true
+    } else {
+      // we are behind
+      false
+    }
+  }
+
+  /**
+    * Tells whether or not their expected next local commitment number matches with our data
+    *
+    * @param d
+    * @param nextLocalCommitmentNumber
+    * @return
+    *         - true if parties are in sync or remote is behind
+    *         - false if we are behind
+    */
+  def checkRemoteCommit(d: HasCommitments, nextLocalCommitmentNumber: Long): Boolean = {
+    d.commitments.remoteNextCommitInfo match {
+      case Left(waitingForRevocation) if nextLocalCommitmentNumber == waitingForRevocation.nextRemoteCommit.index =>
+        // we just sent a new commit_sig but they didn't receive it
+        true
+      case Left(waitingForRevocation) if nextLocalCommitmentNumber == (waitingForRevocation.nextRemoteCommit.index + 1) =>
+        // we just sent a new commit_sig, they have received it but we haven't received their revocation
+        true
+      case Left(waitingForRevocation) if nextLocalCommitmentNumber < waitingForRevocation.nextRemoteCommit.index =>
+        // they are behind
+        true
+      case Right(_) if nextLocalCommitmentNumber == (d.commitments.remoteCommit.index + 1) =>
+        // they have acknowledged the last commit_sig we sent
+        true
+      case Right(_) if nextLocalCommitmentNumber < (d.commitments.remoteCommit.index + 1) =>
+        // they are behind
+        true
+      case _ =>
+        // we are behind
+        false
+    }
+  }
+
 
   object Closing {
 
-    // used only to compute tx weights and estimate fees
-    lazy val dummyPublicKey = PrivateKey(BinaryData("01" * 32), true).publicKey
+    // @formatter:off
+    sealed trait ClosingType
+    case object MutualClose extends ClosingType
+    case object LocalClose extends ClosingType
+    case object RemoteClose extends ClosingType
+    case object RecoveryClose extends ClosingType
+    case object RevokedClose extends ClosingType
+    // @formatter:on
 
-    def isValidFinalScriptPubkey(scriptPubKey: BinaryData): Boolean = {
+    /**
+      * Indicates whether local has anything at stake in this channel
+      *
+      * @param data
+      * @return true if channel was never open, or got closed immediately, had never any htlcs and local never had a positive balance
+      */
+    def nothingAtStake(data: HasCommitments): Boolean =
+      data.commitments.localCommit.index == 0 &&
+        data.commitments.localCommit.spec.toLocalMsat == 0 &&
+        data.commitments.remoteCommit.index == 0 &&
+        data.commitments.remoteCommit.spec.toRemoteMsat == 0 &&
+        data.commitments.remoteNextCommitInfo.isRight
+
+    /**
+      * Checks if a channel is closed (i.e. its closing tx has been confirmed)
+      *
+      * @param data channel state data
+      * @param additionalConfirmedTx_opt additional confirmed transaction; we need this for the mutual close scenario
+      *                                  because we don't store the closing tx in the channel state
+      * @return the channel closing type, if applicable
+      */
+    def isClosed(data: HasCommitments, additionalConfirmedTx_opt: Option[Transaction]): Option[ClosingType] = data match {
+      case closing: DATA_CLOSING if additionalConfirmedTx_opt.exists(closing.mutualClosePublished.contains) =>
+        Some(MutualClose)
+      case closing: DATA_CLOSING if closing.localCommitPublished.exists(Closing.isLocalCommitDone) =>
+        Some(LocalClose)
+      case closing: DATA_CLOSING if closing.remoteCommitPublished.exists(Closing.isRemoteCommitDone) =>
+        Some(RemoteClose)
+      case closing: DATA_CLOSING if closing.nextRemoteCommitPublished.exists(Closing.isRemoteCommitDone) =>
+        Some(RemoteClose)
+      case closing: DATA_CLOSING if closing.futureRemoteCommitPublished.exists(Closing.isRemoteCommitDone) =>
+        Some(RecoveryClose)
+      case closing: DATA_CLOSING if closing.revokedCommitPublished.exists(Closing.isRevokedCommitDone) =>
+        Some(RevokedClose)
+      case _ => None
+    }
+
+    // used only to compute tx weights and estimate fees
+    lazy val dummyPublicKey = PrivateKey(ByteVector32(ByteVector.fill(32)(1)), true).publicKey
+
+    def isValidFinalScriptPubkey(scriptPubKey: ByteVector): Boolean = {
       Try(Script.parse(scriptPubKey)) match {
         case Success(OP_DUP :: OP_HASH160 :: OP_PUSHDATA(pubkeyHash, _) :: OP_EQUALVERIFY :: OP_CHECKSIG :: Nil) if pubkeyHash.size == 20 => true
         case Success(OP_HASH160 :: OP_PUSHDATA(scriptHash, _) :: OP_EQUAL :: Nil) if scriptHash.size == 20 => true
@@ -183,11 +414,11 @@ object Helpers {
       }
     }
 
-    def firstClosingFee(commitments: Commitments, localScriptPubkey: BinaryData, remoteScriptPubkey: BinaryData)(implicit log: LoggingAdapter): Satoshi = {
+    def firstClosingFee(commitments: Commitments, localScriptPubkey: ByteVector, remoteScriptPubkey: ByteVector)(implicit log: LoggingAdapter): Satoshi = {
       import commitments._
       // this is just to estimate the weight, it depends on size of the pubkey scripts
       val dummyClosingTx = Transactions.makeClosingTx(commitInput, localScriptPubkey, remoteScriptPubkey, localParams.isFunder, Satoshi(0), Satoshi(0), localCommit.spec)
-      val closingWeight = Transaction.weight(Transactions.addSigs(dummyClosingTx, dummyPublicKey, remoteParams.fundingPubKey, "aa" * 71, "bb" * 71).tx)
+      val closingWeight = Transaction.weight(Transactions.addSigs(dummyClosingTx, dummyPublicKey, remoteParams.fundingPubKey, ByteVector.fill(71)(0xaa), ByteVector.fill(71)(0xbb)).tx)
       // no need to use a very high fee here, so we target 6 blocks; also, we "MUST set fee_satoshis less than or equal to the base fee of the final commitment transaction"
       val feeratePerKw = Math.min(Globals.feeratesPerKw.get.blocks_6, commitments.localCommit.spec.feeratePerKw)
       log.info(s"using feeratePerKw=$feeratePerKw for initial closing tx")
@@ -196,12 +427,12 @@ object Helpers {
 
     def nextClosingFee(localClosingFee: Satoshi, remoteClosingFee: Satoshi): Satoshi = ((localClosingFee + remoteClosingFee) / 4) * 2
 
-    def makeFirstClosingTx(keyManager: KeyManager, commitments: Commitments, localScriptPubkey: BinaryData, remoteScriptPubkey: BinaryData)(implicit log: LoggingAdapter): (ClosingTx, ClosingSigned) = {
+    def makeFirstClosingTx(keyManager: KeyManager, commitments: Commitments, localScriptPubkey: ByteVector, remoteScriptPubkey: ByteVector)(implicit log: LoggingAdapter): (ClosingTx, ClosingSigned) = {
       val closingFee = firstClosingFee(commitments, localScriptPubkey, remoteScriptPubkey)
       makeClosingTx(keyManager, commitments, localScriptPubkey, remoteScriptPubkey, closingFee)
     }
 
-    def makeClosingTx(keyManager: KeyManager, commitments: Commitments, localScriptPubkey: BinaryData, remoteScriptPubkey: BinaryData, closingFee: Satoshi)(implicit log: LoggingAdapter): (ClosingTx, ClosingSigned) = {
+    def makeClosingTx(keyManager: KeyManager, commitments: Commitments, localScriptPubkey: ByteVector, remoteScriptPubkey: ByteVector, closingFee: Satoshi)(implicit log: LoggingAdapter): (ClosingTx, ClosingSigned) = {
       import commitments._
       require(isValidFinalScriptPubkey(localScriptPubkey), "invalid localScriptPubkey")
       require(isValidFinalScriptPubkey(remoteScriptPubkey), "invalid remoteScriptPubkey")
@@ -216,7 +447,7 @@ object Helpers {
       (closingTx, closingSigned)
     }
 
-    def checkClosingSignature(keyManager: KeyManager, commitments: Commitments, localScriptPubkey: BinaryData, remoteScriptPubkey: BinaryData, remoteClosingFee: Satoshi, remoteClosingSig: BinaryData)(implicit log: LoggingAdapter): Try[Transaction] = {
+    def checkClosingSignature(keyManager: KeyManager, commitments: Commitments, localScriptPubkey: ByteVector, remoteScriptPubkey: ByteVector, remoteClosingFee: Satoshi, remoteClosingSig: ByteVector)(implicit log: LoggingAdapter): Try[Transaction] = {
       import commitments._
       val lastCommitFeeSatoshi = commitments.commitInput.txOut.amount.amount - commitments.localCommit.publishableTxs.commitTx.tx.txOut.map(_.amount.amount).sum
       if (remoteClosingFee.amount > lastCommitFeeSatoshi) {
@@ -290,17 +521,18 @@ object Helpers {
 
       // all htlc output to us are delayed, so we need to claim them as soon as the delay is over
       val htlcDelayedTxes = htlcTxes.flatMap {
-        txinfo: TransactionWithInputInfo => generateTx("claim-htlc-delayed")(Try {
-          val claimDelayed = Transactions.makeClaimDelayedOutputTx(
-            txinfo.tx,
-            Satoshi(localParams.dustLimitSatoshis),
-            localRevocationPubkey,
-            remoteParams.toSelfDelay,
-            localDelayedPubkey,
-            localParams.defaultFinalScriptPubKey, feeratePerKwDelayed)
-          val sig = keyManager.sign(claimDelayed, keyManager.delayedPaymentPoint(localParams.channelKeyPath), localPerCommitmentPoint)
-          Transactions.addSigs(claimDelayed, sig)
-        })
+        txinfo: TransactionWithInputInfo =>
+          generateTx("claim-htlc-delayed")(Try {
+            val claimDelayed = Transactions.makeClaimDelayedOutputTx(
+              txinfo.tx,
+              Satoshi(localParams.dustLimitSatoshis),
+              localRevocationPubkey,
+              remoteParams.toSelfDelay,
+              localDelayedPubkey,
+              localParams.defaultFinalScriptPubKey, feeratePerKwDelayed)
+            val sig = keyManager.sign(claimDelayed, keyManager.delayedPaymentPoint(localParams.channelKeyPath), localPerCommitmentPoint)
+            Transactions.addSigs(claimDelayed, sig)
+          })
       }
 
       LocalCommitPublished(
@@ -316,9 +548,9 @@ object Helpers {
       *
       * Claim all the HTLCs that we've received from their current commit tx
       *
-      * @param commitments our commitment data, which include payment preimages
+      * @param commitments  our commitment data, which include payment preimages
       * @param remoteCommit the remote commitment data to use to claim outputs (it can be their current or next commitment)
-      * @param tx the remote commitment transaction that has just been published
+      * @param tx           the remote commitment transaction that has just been published
       * @return a list of transactions (one per HTLC that we can claim)
       */
     def claimRemoteCommitTxOutputs(keyManager: KeyManager, commitments: Commitments, remoteCommit: RemoteCommit, tx: Transaction)(implicit log: LoggingAdapter): RemoteCommitPublished = {
@@ -339,22 +571,25 @@ object Helpers {
       val preimages = commitments.localChanges.all.collect { case u: UpdateFulfillHtlc => u.paymentPreimage }
 
       // remember we are looking at the remote commitment so IN for them is really OUT for us and vice versa
+      var outputsAlreadyUsed = Set.empty[Int] // this is needed to handle cases where we have several identical htlcs
       val txes = remoteCommit.spec.htlcs.collect {
         // incoming htlc for which we have the preimage: we spend it directly
         case DirectedHtlc(OUT, add: UpdateAddHtlc) if preimages.exists(r => sha256(r) == add.paymentHash) => generateTx("claim-htlc-success")(Try {
           val preimage = preimages.find(r => sha256(r) == add.paymentHash).get
-          val tx = Transactions.makeClaimHtlcSuccessTx(remoteCommitTx.tx, Satoshi(localParams.dustLimitSatoshis), localHtlcPubkey, remoteHtlcPubkey, remoteRevocationPubkey, localParams.defaultFinalScriptPubKey, add, feeratePerKwHtlc)
-          val sig = keyManager.sign(tx, keyManager.htlcPoint(localParams.channelKeyPath), remoteCommit.remotePerCommitmentPoint)
-          Transactions.addSigs(tx, sig, preimage)
+          val txinfo = Transactions.makeClaimHtlcSuccessTx(remoteCommitTx.tx, outputsAlreadyUsed, Satoshi(localParams.dustLimitSatoshis), localHtlcPubkey, remoteHtlcPubkey, remoteRevocationPubkey, localParams.defaultFinalScriptPubKey, add, feeratePerKwHtlc)
+          outputsAlreadyUsed = outputsAlreadyUsed + txinfo.input.outPoint.index.toInt
+          val sig = keyManager.sign(txinfo, keyManager.htlcPoint(localParams.channelKeyPath), remoteCommit.remotePerCommitmentPoint)
+          Transactions.addSigs(txinfo, sig, preimage)
         })
 
         // (incoming htlc for which we don't have the preimage: nothing to do, it will timeout eventually and they will get their funds back)
 
         // outgoing htlc: they may or may not have the preimage, the only thing to do is try to get back our funds after timeout
         case DirectedHtlc(IN, add: UpdateAddHtlc) => generateTx("claim-htlc-timeout")(Try {
-          val tx = Transactions.makeClaimHtlcTimeoutTx(remoteCommitTx.tx, Satoshi(localParams.dustLimitSatoshis), localHtlcPubkey, remoteHtlcPubkey, remoteRevocationPubkey, localParams.defaultFinalScriptPubKey, add, feeratePerKwHtlc)
-          val sig = keyManager.sign(tx, keyManager.htlcPoint(localParams.channelKeyPath), remoteCommit.remotePerCommitmentPoint)
-          Transactions.addSigs(tx, sig)
+          val txinfo = Transactions.makeClaimHtlcTimeoutTx(remoteCommitTx.tx, outputsAlreadyUsed, Satoshi(localParams.dustLimitSatoshis), localHtlcPubkey, remoteHtlcPubkey, remoteRevocationPubkey, localParams.defaultFinalScriptPubKey, add, feeratePerKwHtlc)
+          outputsAlreadyUsed = outputsAlreadyUsed + txinfo.input.outPoint.index.toInt
+          val sig = keyManager.sign(txinfo, keyManager.htlcPoint(localParams.channelKeyPath), remoteCommit.remotePerCommitmentPoint)
+          Transactions.addSigs(txinfo, sig)
         })
       }.toSeq.flatten
 
@@ -368,11 +603,11 @@ object Helpers {
       *
       * Claim our Main output only
       *
-      * @param commitments  either our current commitment data in case of usual remote uncooperative closing
-      *                     or our outdated commitment data in case of data loss protection procedure; in any case it is used only
-      *                     to get some constant parameters, not commitment data
+      * @param commitments              either our current commitment data in case of usual remote uncooperative closing
+      *                                 or our outdated commitment data in case of data loss protection procedure; in any case it is used only
+      *                                 to get some constant parameters, not commitment data
       * @param remotePerCommitmentPoint the remote perCommitmentPoint corresponding to this commitment
-      * @param tx the remote commitment transaction that has just been published
+      * @param tx                       the remote commitment transaction that has just been published
       * @return a list of transactions (one per HTLC that we can claim)
       */
     def claimRemoteCommitMainOutput(keyManager: KeyManager, commitments: Commitments, remotePerCommitmentPoint: Point, tx: Transaction)(implicit log: LoggingAdapter): RemoteCommitPublished = {
@@ -445,24 +680,26 @@ object Helpers {
           })
 
           // we retrieve the informations needed to rebuild htlc scripts
-          val htlcInfos = db.listHtlcHtlcInfos(commitments.channelId, txnumber)
+          val htlcInfos = db.listHtlcInfos(commitments.channelId, txnumber)
           log.info(s"got htlcs=${htlcInfos.size} for txnumber=$txnumber")
           val htlcsRedeemScripts = (
-              htlcInfos.map { case (paymentHash, cltvExpiry) => Scripts.htlcReceived(remoteHtlcPubkey, localHtlcPubkey, remoteRevocationPubkey, Crypto.ripemd160(paymentHash), cltvExpiry) } ++
+            htlcInfos.map { case (paymentHash, cltvExpiry) => Scripts.htlcReceived(remoteHtlcPubkey, localHtlcPubkey, remoteRevocationPubkey, Crypto.ripemd160(paymentHash), cltvExpiry) } ++
               htlcInfos.map { case (paymentHash, _) => Scripts.htlcOffered(remoteHtlcPubkey, localHtlcPubkey, remoteRevocationPubkey, Crypto.ripemd160(paymentHash)) }
-              )
+            )
             .map(redeemScript => (Script.write(pay2wsh(redeemScript)) -> Script.write(redeemScript)))
             .toMap
 
           // and finally we steal the htlc outputs
-          val htlcPenaltyTxs = tx.txOut.collect { case txOut if htlcsRedeemScripts.contains(txOut.publicKeyScript) =>
-            val htlcRedeemScript = htlcsRedeemScripts(txOut.publicKeyScript)
-            generateTx("htlc-penalty")(Try {
-              val txinfo = Transactions.makeHtlcPenaltyTx(tx, htlcRedeemScript, Satoshi(localParams.dustLimitSatoshis), localParams.defaultFinalScriptPubKey, feeratePerKwPenalty)
-              val sig = keyManager.sign(txinfo, keyManager.revocationPoint(localParams.channelKeyPath), remotePerCommitmentSecret)
-              Transactions.addSigs(txinfo, sig, remoteRevocationPubkey)
-            })
-          }.toList.flatten
+          var outputsAlreadyUsed = Set.empty[Int] // this is needed to handle cases where we have several identical htlcs
+        val htlcPenaltyTxs = tx.txOut.collect { case txOut if htlcsRedeemScripts.contains(txOut.publicKeyScript) =>
+          val htlcRedeemScript = htlcsRedeemScripts(txOut.publicKeyScript)
+          generateTx("htlc-penalty")(Try {
+            val htlcPenalty = Transactions.makeHtlcPenaltyTx(tx, outputsAlreadyUsed, htlcRedeemScript, Satoshi(localParams.dustLimitSatoshis), localParams.defaultFinalScriptPubKey, feeratePerKwPenalty)
+            outputsAlreadyUsed = outputsAlreadyUsed + htlcPenalty.input.outPoint.index.toInt
+            val sig = keyManager.sign(htlcPenalty, keyManager.revocationPoint(localParams.channelKeyPath), remotePerCommitmentSecret)
+            Transactions.addSigs(htlcPenalty, sig, remoteRevocationPubkey)
+          })
+        }.toList.flatten
 
           RevokedCommitPublished(
             commitTx = tx,
@@ -480,10 +717,10 @@ object Helpers {
       *
       * In case a revoked commitment with pending HTLCs is published, there are two ways the HTLC outputs can be taken as punishment:
       * - by spending the corresponding output of the commitment tx, using [[HtlcPenaltyTx]] that we generate as soon as we detect that a revoked commit
-      *   as been spent; note that those transactions will compete with [[HtlcSuccessTx]] and [[HtlcTimeoutTx]] published by the counterparty.
+      * as been spent; note that those transactions will compete with [[HtlcSuccessTx]] and [[HtlcTimeoutTx]] published by the counterparty.
       * - by spending the delayed output of [[HtlcSuccessTx]] and [[HtlcTimeoutTx]] if those get confirmed; because the output of these txes is protected by
-      *   an OP_CSV delay, we will have time to spend them with a revocation key. In that case, we generate the spending transactions "on demand",
-      *   this is the purpose of this method.
+      * an OP_CSV delay, we will have time to spend them with a revocation key. In that case, we generate the spending transactions "on demand",
+      * this is the purpose of this method.
       *
       * @param keyManager
       * @param commitments
@@ -513,9 +750,9 @@ object Helpers {
             val feeratePerKwPenalty = Globals.feeratesPerKw.get.block_1
 
             generateTx("claim-htlc-delayed-penalty")(Try {
-              val txinfo = Transactions.makeClaimDelayedOutputPenaltyTx(htlcTx, Satoshi(localParams.dustLimitSatoshis), remoteRevocationPubkey, localParams.toSelfDelay, remoteDelayedPaymentPubkey, localParams.defaultFinalScriptPubKey, feeratePerKwPenalty)
-              val sig = keyManager.sign(txinfo, keyManager.revocationPoint(localParams.channelKeyPath), remotePerCommitmentSecret)
-              val signedTx = Transactions.addSigs(txinfo, sig)
+              val htlcDelayedPenalty = Transactions.makeClaimDelayedOutputPenaltyTx(htlcTx, Satoshi(localParams.dustLimitSatoshis), remoteRevocationPubkey, localParams.toSelfDelay, remoteDelayedPaymentPubkey, localParams.defaultFinalScriptPubKey, feeratePerKwPenalty)
+              val sig = keyManager.sign(htlcDelayedPenalty, keyManager.revocationPoint(localParams.channelKeyPath), remotePerCommitmentSecret)
+              val signedTx = Transactions.addSigs(htlcDelayedPenalty, sig)
               // we need to make sure that the tx is indeed valid
               Transaction.correctlySpends(signedTx.tx, Seq(htlcTx), ScriptFlags.STANDARD_SCRIPT_VERIFY_FLAGS)
               signedTx
@@ -541,7 +778,7 @@ object Helpers {
       *
       * @param localCommit
       * @param tx
-      * @return a set of pairs (add, fulfills) if extraction was successful:
+      * @return   a set of pairs (add, fulfills) if extraction was successful:
       *           - add is the htlc in the downstream channel from which we extracted the preimage
       *           - fulfill needs to be sent to the upstream channel
       */
@@ -549,10 +786,10 @@ object Helpers {
       val paymentPreimages = tx.txIn.map(_.witness match {
         case ScriptWitness(Seq(localSig, paymentPreimage, htlcOfferedScript)) if paymentPreimage.size == 32 =>
           log.info(s"extracted paymentPreimage=$paymentPreimage from tx=$tx (claim-htlc-success)")
-          Some(paymentPreimage)
-        case ScriptWitness(Seq(BinaryData.empty, remoteSig, localSig, paymentPreimage, htlcReceivedScript)) if paymentPreimage.size == 32 =>
+          Some(ByteVector32(paymentPreimage))
+        case ScriptWitness(Seq(ByteVector.empty, remoteSig, localSig, paymentPreimage, htlcReceivedScript)) if paymentPreimage.size == 32 =>
           log.info(s"extracted paymentPreimage=$paymentPreimage from tx=$tx (htlc-success)")
-          Some(paymentPreimage)
+          Some(ByteVector32(paymentPreimage))
         case _ => None
       }).toSet.flatten
       paymentPreimages flatMap { paymentPreimage =>
@@ -585,8 +822,8 @@ object Helpers {
       } else {
         // maybe this is a timeout tx, in that case we can resolve and fail the corresponding htlc
         tx.txIn.map(_.witness match {
-          case ScriptWitness(Seq(BinaryData.empty, remoteSig, localSig, BinaryData.empty, htlcOfferedScript)) =>
-            val paymentHash160 = BinaryData(htlcOfferedScript.slice(109, 109 + 20))
+          case ScriptWitness(Seq(ByteVector.empty, remoteSig, localSig, ByteVector.empty, htlcOfferedScript)) =>
+            val paymentHash160 = htlcOfferedScript.slice(109, 109 + 20)
             log.info(s"extracted paymentHash160=$paymentHash160 from tx=$tx (htlc-timeout)")
             localCommit.spec.htlcs.filter(_.direction == OUT).map(_.add).filter(add => ripemd160(add.paymentHash) == paymentHash160)
           case _ => Set.empty
@@ -609,13 +846,80 @@ object Helpers {
       } else {
         // maybe this is a timeout tx, in that case we can resolve and fail the corresponding htlc
         tx.txIn.map(_.witness match {
-          case ScriptWitness(Seq(remoteSig, BinaryData.empty, htlcReceivedScript)) =>
-            val paymentHash160 = BinaryData(htlcReceivedScript.slice(69, 69 + 20))
+          case ScriptWitness(Seq(remoteSig, ByteVector.empty, htlcReceivedScript)) =>
+            val paymentHash160 = htlcReceivedScript.slice(69, 69 + 20)
             log.info(s"extracted paymentHash160=$paymentHash160 from tx=$tx (claim-htlc-timeout)")
             remoteCommit.spec.htlcs.filter(_.direction == IN).map(_.add).filter(add => ripemd160(add.paymentHash) == paymentHash160)
           case _ => Set.empty
         }).toSet.flatten
       }
+
+    /**
+      * Tells if we were the origin of this outgoing htlc
+      *
+      * @param htlcId
+      * @param originChannels
+      * @return
+      */
+    def isSentByLocal(htlcId: Long, originChannels: Map[Long, Origin]) = originChannels.get(htlcId) match {
+      case Some(Local(_, _)) => true
+      case _ => false
+    }
+
+    /**
+      * As soon as a local or remote commitment reaches min_depth, we know which htlcs will be settled on-chain (whether
+      * or not they actually have an output in the commitment tx).
+      *
+      * @param localCommit
+      * @param remoteCommit
+      * @param nextRemoteCommit_opt
+      * @param tx a transaction that is sufficiently buried in the blockchain
+      */
+    def onchainOutgoingHtlcs(localCommit: LocalCommit, remoteCommit: RemoteCommit, nextRemoteCommit_opt: Option[RemoteCommit], tx: Transaction): Set[UpdateAddHtlc] = {
+      if (localCommit.publishableTxs.commitTx.tx.txid == tx.txid) {
+        localCommit.spec.htlcs.filter(_.direction == OUT).map(_.add)
+      } else if (remoteCommit.txid == tx.txid) {
+        remoteCommit.spec.htlcs.filter(_.direction == IN).map(_.add)
+      } else if (nextRemoteCommit_opt.map(_.txid) == Some(tx.txid)) {
+        nextRemoteCommit_opt.get.spec.htlcs.filter(_.direction == IN).map(_.add)
+      } else {
+        Set.empty
+      }
+    }
+
+    /**
+      * If a local commitment tx reaches min_depth, we need to fail the outgoing htlcs that only us had signed, because
+      * they will never reach the blockchain.
+      *
+      * Those are only present in the remote's commitment.
+      *
+      * @param localCommit
+      * @param remoteCommit
+      * @param tx
+      * @param log
+      * @return
+      */
+    def overriddenOutgoingHtlcs(localCommit: LocalCommit, remoteCommit: RemoteCommit, nextRemoteCommit_opt: Option[RemoteCommit], tx: Transaction)(implicit log: LoggingAdapter): Set[UpdateAddHtlc] =
+      if (localCommit.publishableTxs.commitTx.tx.txid == tx.txid) {
+        // our commit got confirmed, so any htlc that we signed but they didn't sign will never reach the chain
+        val mostRecentRemoteCommit = nextRemoteCommit_opt.getOrElse(remoteCommit)
+        // NB: from the p.o.v of remote, their incoming htlcs are our outgoing htlcs
+        mostRecentRemoteCommit.spec.htlcs.filter(_.direction == IN).map(_.add) -- localCommit.spec.htlcs.filter(_.direction == OUT).map(_.add)
+      } else if (remoteCommit.txid == tx.txid) {
+        // their commit got confirmed
+        nextRemoteCommit_opt match {
+          case Some(nextRemoteCommit) =>
+            // we had signed a new commitment but they committed the previous one
+            // any htlc that we signed in the new commitment that they didn't sign will never reach the chain
+            nextRemoteCommit.spec.htlcs.filter(_.direction == IN).map(_.add) -- localCommit.spec.htlcs.filter(_.direction == OUT).map(_.add)
+          case None =>
+            // their last commitment got confirmed, so no htlcs will be overriden, they will timeout or be fulfilled on chain
+            Set.empty
+        }
+      } else if (nextRemoteCommit_opt.map(_.txid) == Some(tx.txid)) {
+        // their last commitment got confirmed, so no htlcs will be overriden, they will timeout or be fulfilled on chain
+        Set.empty
+      } else Set.empty
 
     /**
       * In CLOSING state, when we are notified that a transaction has been confirmed, we check if this tx belongs in the
@@ -770,12 +1074,68 @@ object Helpers {
       * @param irrevocablySpent a map of known spent outpoints
       * @return true if we know for sure that the utxos consumed by the tx have already irrevocably been spent, false otherwise
       */
-    def inputsAlreadySpent(tx: Transaction, irrevocablySpent: Map[OutPoint, BinaryData]): Boolean = {
+    def inputsAlreadySpent(tx: Transaction, irrevocablySpent: Map[OutPoint, ByteVector32]): Boolean = {
       require(tx.txIn.size == 1, "only tx with one input is supported")
       val outPoint = tx.txIn.head.outPoint
       irrevocablySpent.contains(outPoint)
     }
 
+    /**
+      * This helper function returns the fee paid by the given transaction.
+      *
+      * It relies on the current channel data to find the parent tx and compute the fee, and also provides a description.
+      *
+      * @param tx a tx for which we want to compute the fee
+      * @param d  current channel data
+      * @return if the parent tx is found, a tuple (fee, description)
+      */
+    def networkFeePaid(tx: Transaction, d: DATA_CLOSING): Option[(Satoshi, String)] = {
+      // only funder pays the fee
+      if (d.commitments.localParams.isFunder) {
+        // we build a map with all known txes (that's not particularly efficient, but it doesn't really matter)
+        val txes: Map[ByteVector32, (Transaction, String)] = (
+          d.mutualClosePublished.map(_ -> "mutual") ++
+            d.localCommitPublished.map(_.commitTx).map(_ -> "local-commit").toSeq ++
+            d.localCommitPublished.flatMap(_.claimMainDelayedOutputTx).map(_ -> "local-main-delayed") ++
+            d.localCommitPublished.toSeq.flatMap(_.htlcSuccessTxs).map(_ -> "local-htlc-success") ++
+            d.localCommitPublished.toSeq.flatMap(_.htlcTimeoutTxs).map(_ -> "local-htlc-timeout") ++
+            d.localCommitPublished.toSeq.flatMap(_.claimHtlcDelayedTxs).map(_ -> "local-htlc-delayed") ++
+            d.remoteCommitPublished.map(_.commitTx).map(_ -> "remote-commit") ++
+            d.remoteCommitPublished.toSeq.flatMap(_.claimMainOutputTx).map(_ -> "remote-main") ++
+            d.remoteCommitPublished.toSeq.flatMap(_.claimHtlcSuccessTxs).map(_ -> "remote-htlc-success") ++
+            d.remoteCommitPublished.toSeq.flatMap(_.claimHtlcTimeoutTxs).map(_ -> "remote-htlc-timeout") ++
+            d.nextRemoteCommitPublished.map(_.commitTx).map(_ -> "remote-commit") ++
+            d.nextRemoteCommitPublished.toSeq.flatMap(_.claimMainOutputTx).map(_ -> "remote-main") ++
+            d.nextRemoteCommitPublished.toSeq.flatMap(_.claimHtlcSuccessTxs).map(_ -> "remote-htlc-success") ++
+            d.nextRemoteCommitPublished.toSeq.flatMap(_.claimHtlcTimeoutTxs).map(_ -> "remote-htlc-timeout") ++
+            d.revokedCommitPublished.map(_.commitTx).map(_ -> "revoked-commit") ++
+            d.revokedCommitPublished.flatMap(_.claimMainOutputTx).map(_ -> "revoked-main") ++
+            d.revokedCommitPublished.flatMap(_.mainPenaltyTx).map(_ -> "revoked-main-penalty") ++
+            d.revokedCommitPublished.flatMap(_.htlcPenaltyTxs).map(_ -> "revoked-htlc-penalty") ++
+            d.revokedCommitPublished.flatMap(_.claimHtlcDelayedPenaltyTxs).map(_ -> "revoked-htlc-penalty-delayed")
+          )
+          .map { case (tx, desc) => tx.txid -> (tx, desc) } // will allow easy lookup of parent transaction
+          .toMap
+
+        def fee(child: Transaction): Option[Satoshi] = {
+          require(child.txIn.size == 1, "transaction must have exactly one input")
+          val outPoint = child.txIn.head.outPoint
+          val parentTxOut_opt = if (outPoint == d.commitments.commitInput.outPoint) {
+            Some(d.commitments.commitInput.txOut)
+          }
+          else {
+            txes.get(outPoint.txid) map { case (parent, _) => parent.txOut(outPoint.index.toInt) }
+          }
+          parentTxOut_opt map {
+            case parentTxOut => parentTxOut.amount - child.txOut.map(_.amount).sum
+          }
+        }
+
+        txes.get(tx.txid) flatMap {
+          case (_, desc) => fee(tx).map(_ -> desc)
+        }
+      } else None
+    }
   }
 
 }

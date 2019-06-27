@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair
 
-import java.text.DecimalFormat
+import java.text.{DecimalFormat, NumberFormat}
 
 import fr.acinq.bitcoin.{Btc, BtcAmount, MilliBtc, MilliSatoshi, Satoshi}
 import grizzled.slf4j.Logging
@@ -93,11 +93,36 @@ case object BtcUnit extends CoinUnit {
 
 object CoinUtils extends Logging {
 
-  val COIN_PATTERN = "###,###,###,##0.###########"
-  var COIN_FORMAT = new DecimalFormat(COIN_PATTERN)
+  // msat pattern, no decimals allowed
+  val MILLI_SAT_PATTERN = "#,###,###,###,###,###,##0"
 
-  def setCoinPattern(pattern: String) = {
+  // sat pattern decimals are optional
+  val SAT_PATTERN = "#,###,###,###,###,##0.###"
+
+  // bits pattern always shows 2 decimals (msat optional)
+  val BITS_PATTERN = "##,###,###,###,##0.00###"
+
+  // milli btc pattern always shows 5 decimals (msat optional)
+  val MILLI_BTC_PATTERN = "##,###,###,##0.00000###"
+
+  // btc pattern always shows 8 decimals (msat optional). This is the default pattern.
+  val BTC_PATTERN = "##,###,##0.00000000###"
+
+  var COIN_FORMAT: NumberFormat = new DecimalFormat(BTC_PATTERN)
+
+  def setCoinPattern(pattern: String): Unit = {
     COIN_FORMAT = new DecimalFormat(pattern)
+  }
+
+  def getPatternFromUnit(unit: CoinUnit): String = {
+    unit match {
+      case MSatUnit => MILLI_SAT_PATTERN
+      case SatUnit => SAT_PATTERN
+      case BitUnit => BITS_PATTERN
+      case MBtcUnit => MILLI_BTC_PATTERN
+      case BtcUnit => BTC_PATTERN
+      case _ => throw new IllegalArgumentException("unhandled unit")
+    }
   }
 
   /**
@@ -199,13 +224,13 @@ object CoinUtils extends Logging {
   }
 
   /**
-    * Converts the amount to the user preferred unit and returns the Long value.
+    * Converts the amount to the user preferred unit and returns the BigDecimal value.
     * This method is useful to feed numeric text input without formatting.
     *
     * Returns -1 if the given amount can not be converted.
     *
     * @param amount BtcAmount
-    * @return Long value of the BtcAmount
+    * @return BigDecimal value of the BtcAmount
     */
   def rawAmountInUnit(amount: BtcAmount, unit: CoinUnit): BigDecimal = Try(convertAmountToGUIUnit(amount, unit) match {
     case a: BtcAmountGUILossless => BigDecimal(a.amount_msat) / a.unit.factorToMsat

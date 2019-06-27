@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,28 +18,31 @@ package fr.acinq.eclair
 
 import java.io.File
 
-import com.sun.javafx.application.LauncherImpl
+import akka.actor.ActorSystem
 import fr.acinq.eclair.gui.{FxApp, FxPreloader}
 import grizzled.slf4j.Logging
+import javafx.application.Application
 
 /**
   * Created by PM on 25/01/2016.
   */
 object JavafxBoot extends App with Logging {
-  val datadir = new File(System.getProperty("eclair.datadir", System.getProperty("user.home") + "/.eclair"))
-
+  val datadir = new File(System.getProperty("eclair.datadir", System.getProperty("user.home") + "/.qtum-eclair"))
   try {
     val headless = System.getProperty("eclair.headless") != null
 
     if (headless) {
+      implicit val system = ActorSystem("eclair-node-gui")
       new Setup(datadir).bootstrap
     } else {
-      LauncherImpl.launchApplication(classOf[FxApp], classOf[FxPreloader], Array(datadir.getAbsolutePath))
+      System.setProperty("javafx.preloader", classOf[FxPreloader].getName)
+      Application.launch(classOf[FxApp], datadir.getAbsolutePath)
     }
   } catch {
     case t: Throwable =>
-      System.err.println(s"fatal error: ${t.getMessage}")
-      logger.error(s"fatal error: ${t.getMessage}")
+      val errorMsg = if (t.getMessage != null) t.getMessage else t.getClass.getSimpleName
+      System.err.println(s"fatal error: $errorMsg")
+      logger.error(s"fatal error: $errorMsg", t)
       System.exit(1)
   }
 }

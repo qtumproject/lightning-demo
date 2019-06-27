@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -18,7 +18,8 @@ package fr.acinq.eclair.channel
 
 import akka.actor.{Actor, ActorLogging, ActorRef, Stash}
 import fr.acinq.eclair.channel.Commitments.msg2String
-import fr.acinq.eclair.wire.LightningMessage
+import fr.acinq.eclair.wire.{Init, LightningMessage}
+import scodec.bits.ByteVector
 
 import scala.concurrent.duration._
 import scala.util.Random
@@ -70,8 +71,9 @@ class FuzzyPipe(fuzzy: Boolean) extends Actor with Stash with ActorLogging {
       log.debug(f"  X-${msg2String(msg)}%-6s--- B")
     case 'reconnect =>
       log.debug("RECONNECTED")
-      a ! INPUT_RECONNECTED(self)
-      b ! INPUT_RECONNECTED(self)
+      val dummyInit = Init(ByteVector.empty, ByteVector.empty)
+      a ! INPUT_RECONNECTED(self, dummyInit, dummyInit)
+      b ! INPUT_RECONNECTED(self, dummyInit, dummyInit)
       context become connected(a, b, Random.nextInt(40))
   }
 }

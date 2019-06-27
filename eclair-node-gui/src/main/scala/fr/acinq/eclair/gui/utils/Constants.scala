@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,11 +16,10 @@
 
 package fr.acinq.eclair.gui.utils
 
+import fr.acinq.eclair._
 import javafx.collections.FXCollections
 
-import fr.acinq.eclair.{BtcUnit, MBtcUnit, MSatUnit, SatUnit}
-
 object Constants {
-  val FX_UNITS_ARRAY_NO_MSAT = FXCollections.observableArrayList(SatUnit.label, MBtcUnit.label, BtcUnit.label)
-  val FX_UNITS_ARRAY = FXCollections.observableArrayList(MSatUnit.label, SatUnit.label, MBtcUnit.label, BtcUnit.label)
+  val FX_UNITS_ARRAY_NO_MSAT = FXCollections.observableArrayList(SatUnit.label, BitUnit.label, MBtcUnit.label, BtcUnit.label)
+  val FX_UNITS_ARRAY = FXCollections.observableArrayList(MSatUnit.label, SatUnit.label, BitUnit.label, MBtcUnit.label, BtcUnit.label)
 }

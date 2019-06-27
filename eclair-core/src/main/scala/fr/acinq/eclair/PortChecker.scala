@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@
 
 package fr.acinq.eclair
 
-import java.net.{InetAddress, ServerSocket}
+import java.net.{InetAddress, InetSocketAddress, ServerSocket}
 
 import scala.util.{Failure, Success, Try}
 
@@ -28,8 +28,12 @@ object PortChecker {
     *
     * @return
     */
-  def checkAvailable(host: String, port: Int): Unit = {
-    Try(new ServerSocket(port, 50, InetAddress.getByName(host))) match {
+  def checkAvailable(host: String, port: Int): Unit = checkAvailable(InetAddress.getByName(host), port)
+
+  def checkAvailable(socketAddress: InetSocketAddress): Unit = checkAvailable(socketAddress.getAddress, socketAddress.getPort)
+
+  def checkAvailable(address: InetAddress, port: Int): Unit = {
+    Try(new ServerSocket(port, 50, address)) match {
       case Success(socket) =>
         Try(socket.close())
       case Failure(_) =>

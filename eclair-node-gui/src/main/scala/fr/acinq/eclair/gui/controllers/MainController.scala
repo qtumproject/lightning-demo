@@ -1,5 +1,5 @@
 /*
- * Copyright 2018 ACINQ SAS
+ * Copyright 2019 ACINQ SAS
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -20,6 +20,18 @@ import java.text.NumberFormat
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.util.Locale
+
+import com.google.common.net.HostAndPort
+import fr.acinq.bitcoin.Crypto.PublicKey
+import fr.acinq.bitcoin.{MilliSatoshi, Satoshi}
+import fr.acinq.eclair.NodeParams.{BITCOIND, ELECTRUM}
+import fr.acinq.eclair.gui.stages._
+import fr.acinq.eclair.gui.utils.{ContextMenuUtils, CopyAction, IndexedObservableList}
+import fr.acinq.eclair.gui.{FxApp, Handlers}
+import fr.acinq.eclair.payment.{PaymentEvent, PaymentReceived, PaymentRelayed, PaymentSent}
+import fr.acinq.eclair.wire.{ChannelAnnouncement, NodeAnnouncement}
+import fr.acinq.eclair.{CoinUtils, Setup, ShortChannelId}
+import grizzled.slf4j.Logging
 import javafx.animation.{FadeTransition, ParallelTransition, SequentialTransition, TranslateTransition}
 import javafx.application.{HostServices, Platform}
 import javafx.beans.property._
@@ -36,22 +48,12 @@ import javafx.scene.layout.{AnchorPane, HBox, StackPane, VBox}
 import javafx.scene.paint.Color
 import javafx.scene.shape.Rectangle
 import javafx.scene.text.Text
-import javafx.stage.FileChooser.ExtensionFilter
 import javafx.stage._
 import javafx.util.{Callback, Duration}
 
-import com.google.common.net.HostAndPort
-import fr.acinq.bitcoin.{MilliSatoshi, Satoshi}
-import fr.acinq.eclair.NodeParams.{BITCOIND, ELECTRUM}
-import fr.acinq.eclair.{CoinUtils, Setup}
-import fr.acinq.eclair.gui.stages._
-import fr.acinq.eclair.gui.utils.{ContextMenuUtils, CopyAction}
-import fr.acinq.eclair.gui.{FxApp, Handlers}
-import fr.acinq.eclair.payment.{PaymentEvent, PaymentReceived, PaymentRelayed, PaymentSent}
-import fr.acinq.eclair.wire.{ChannelAnnouncement, NodeAnnouncement}
-import grizzled.slf4j.Logging
-
-case class ChannelInfo(announcement: ChannelAnnouncement, var feeBaseMsat: Long, var feeProportionalMillionths: Long,
+case class ChannelInfo(announcement: ChannelAnnouncement,
+                       var feeBaseMsatNode1_opt: Option[Long], var feeBaseMsatNode2_opt: Option[Long],
+                       var feeProportionalMillionthsNode1_opt: Option[Long], var feeProportionalMillionthsNode2_opt: Option[Long],
                        capacity: Satoshi, var isNode1Enabled: Option[Boolean], var isNode2Enabled: Option[Boolean])
 
 sealed trait Record {
@@ -80,6 +82,7 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
 
   // status bar elements
   @FXML var labelNodeId: Label = _
+  @FXML var statusBalanceLabel: Label = _
   @FXML var rectRGB: Rectangle = _
   @FXML var labelAlias: Label = _
   @FXML var labelApi: Label = _
@@ -94,7 +97,8 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
   @FXML var channelsTab: Tab = _
 
   // all nodes tab
-  val networkNodesList = FXCollections.observableArrayList[NodeAnnouncement]()
+  val networkNodesMap = new IndexedObservableList[PublicKey, NodeAnnouncement]
+  private val networkNodesList = networkNodesMap.list
   @FXML var networkNodesTab: Tab = _
   @FXML var networkNodesTable: TableView[NodeAnnouncement] = _
   @FXML var networkNodesIdColumn: TableColumn[NodeAnnouncement, String] = _
@@ -103,15 +107,19 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
   @FXML var networkNodesIPColumn: TableColumn[NodeAnnouncement, String] = _
 
   // all channels
-  val networkChannelsList = FXCollections.observableArrayList[ChannelInfo]()
+  val networkChannelsMap = new IndexedObservableList[ShortChannelId, ChannelInfo]
+  private val networkChannelsList = networkChannelsMap.list
   @FXML var networkChannelsTab: Tab = _
   @FXML var networkChannelsTable: TableView[ChannelInfo] = _
   @FXML var networkChannelsIdColumn: TableColumn[ChannelInfo, String] = _
   @FXML var networkChannelsNode1Column: TableColumn[ChannelInfo, String] = _
   @FXML var networkChannelsDirectionsColumn: TableColumn[ChannelInfo, ChannelInfo] = _
   @FXML var networkChannelsNode2Column: TableColumn[ChannelInfo, String] = _
-  @FXML var networkChannelsFeeBaseMsatColumn: TableColumn[ChannelInfo, String] = _
-  @FXML var networkChannelsFeeProportionalMillionthsColumn: TableColumn[ChannelInfo, String] = _
+  @FXML var networkChannelsFeeBaseMsatNode1Column: TableColumn[ChannelInfo, String] = _
+  @FXML var networkChannelsFeeProportionalMillionthsNode1Column: TableColumn[ChannelInfo, String] = _
+  @FXML var networkChannelsFeeBaseMsatNode2Column: TableColumn[ChannelInfo, String] = _
+  @FXML var networkChannelsFeeProportionalMillionthsNode2Column: TableColumn[ChannelInfo, String] = _
+
   @FXML var networkChannelsCapacityColumn: TableColumn[ChannelInfo, String] = _
 
   // payment sent table
@@ -191,7 +199,7 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
     })
     networkNodesIPColumn.setCellValueFactory(new Callback[CellDataFeatures[NodeAnnouncement, String], ObservableValue[String]]() {
       def call(pn: CellDataFeatures[NodeAnnouncement, String]) = {
-        val address = pn.getValue.addresses.map(a => HostAndPort.fromParts(a.getHostString, a.getPort)).mkString(",")
+        val address = pn.getValue.addresses.map(a => HostAndPort.fromParts(a.socketAddress.getHostString, a.socketAddress.getPort)).mkString(",")
         new SimpleStringProperty(address)
       }
     })
@@ -229,14 +237,22 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
     networkChannelsNode2Column.setCellValueFactory(new Callback[CellDataFeatures[ChannelInfo, String], ObservableValue[String]]() {
       def call(pc: CellDataFeatures[ChannelInfo, String]) = new SimpleStringProperty(pc.getValue.announcement.nodeId2.toString)
     })
-    networkChannelsFeeBaseMsatColumn.setCellValueFactory(new Callback[CellDataFeatures[ChannelInfo, String], ObservableValue[String]]() {
+    networkChannelsFeeBaseMsatNode1Column.setCellValueFactory(new Callback[CellDataFeatures[ChannelInfo, String], ObservableValue[String]]() {
       def call(pc: CellDataFeatures[ChannelInfo, String]) = new SimpleStringProperty(
-        CoinUtils.formatAmountInUnit(MilliSatoshi(pc.getValue.feeBaseMsat), FxApp.getUnit, withUnit = true))
+        pc.getValue.feeBaseMsatNode1_opt.map(f => CoinUtils.formatAmountInUnit(MilliSatoshi(f), FxApp.getUnit, withUnit = true)).getOrElse("?"))
+    })
+    networkChannelsFeeBaseMsatNode2Column.setCellValueFactory(new Callback[CellDataFeatures[ChannelInfo, String], ObservableValue[String]]() {
+      def call(pc: CellDataFeatures[ChannelInfo, String]) = new SimpleStringProperty(
+        pc.getValue.feeBaseMsatNode2_opt.map(f => CoinUtils.formatAmountInUnit(MilliSatoshi(f), FxApp.getUnit, withUnit = true)).getOrElse("?"))
     })
     // feeProportionalMillionths is fee per satoshi in millionths of a satoshi
-    networkChannelsFeeProportionalMillionthsColumn.setCellValueFactory(new Callback[CellDataFeatures[ChannelInfo, String], ObservableValue[String]]() {
+    networkChannelsFeeProportionalMillionthsNode1Column.setCellValueFactory(new Callback[CellDataFeatures[ChannelInfo, String], ObservableValue[String]]() {
       def call(pc: CellDataFeatures[ChannelInfo, String]) = new SimpleStringProperty(
-        s"${CoinUtils.COIN_FORMAT.format(pc.getValue.feeProportionalMillionths.toDouble / 1000000 * 100)}%")
+        pc.getValue.feeProportionalMillionthsNode1_opt.map(f => s"${NumberFormat.getInstance().format(f.toDouble / 1000000 * 100)}%").getOrElse("?"))
+    })
+    networkChannelsFeeProportionalMillionthsNode2Column.setCellValueFactory(new Callback[CellDataFeatures[ChannelInfo, String], ObservableValue[String]]() {
+      def call(pc: CellDataFeatures[ChannelInfo, String]) = new SimpleStringProperty(
+        pc.getValue.feeProportionalMillionthsNode2_opt.map(f => s"${NumberFormat.getInstance().format(f.toDouble / 1000000 * 100)}%").getOrElse("?"))
     })
     networkChannelsCapacityColumn.setCellValueFactory(new Callback[CellDataFeatures[ChannelInfo, String], ObservableValue[String]]() {
       def call(pc: CellDataFeatures[ChannelInfo, String]) = new SimpleStringProperty(
@@ -263,19 +279,19 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
               setText(null)
             } else {
               item match {
-                case ChannelInfo(_, _, _, _, Some(true), Some(true)) =>
+                case ChannelInfo(_, _, _, _, _, _, Some(true), Some(true)) =>
                   directionImage.setImage(new Image("/gui/commons/images/in-out-11.png", false))
                   setTooltip(new Tooltip("Both Node 1 and Node 2 are enabled"))
                   setGraphic(directionImage)
-                case ChannelInfo(_, _, _, _, Some(true), Some(false)) =>
+                case ChannelInfo(_, _, _, _, _, _, Some(true), Some(false)) =>
                   directionImage.setImage(new Image("/gui/commons/images/in-out-10.png", false))
                   setTooltip(new Tooltip("Node 1 is enabled, but not Node 2"))
                   setGraphic(directionImage)
-                case ChannelInfo(_, _, _, _, Some(false), Some(true)) =>
+                case ChannelInfo(_, _, _, _, _, _, Some(false), Some(true)) =>
                   directionImage.setImage(new Image("/gui/commons/images/in-out-01.png", false))
                   setTooltip(new Tooltip("Node 2 is enabled, but not Node 1"))
                   setGraphic(directionImage)
-                case ChannelInfo(_, _, _, _, Some(false), Some(false)) =>
+                case ChannelInfo(_, _, _, _, _, _, Some(false), Some(false)) =>
                   directionImage.setImage(new Image("/gui/commons/images/in-out-00.png", false))
                   setTooltip(new Tooltip("Neither Node 1 nor Node 2 is enabled"))
                   setGraphic(directionImage)
@@ -349,12 +365,11 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
       case ELECTRUM => "Electrum"
     }
     bitcoinWallet.setText(wallet)
-    bitcoinVersion.setText(s"v${setup.version}")
     bitcoinChain.setText(s"${setup.chain.toUpperCase()}")
     bitcoinChain.getStyleClass.add(setup.chain)
 
     val nodeURI_opt = setup.nodeParams.publicAddresses.headOption.map(address => {
-      s"${setup.nodeParams.nodeId}@${HostAndPort.fromParts(address.getHostString, address.getPort)}"
+      s"${setup.nodeParams.nodeId}@${HostAndPort.fromParts(address.socketAddress.getHostString, address.socketAddress.getPort)}"
     })
 
     contextMenu = ContextMenuUtils.buildCopyContext(List(CopyAction("Copy Pubkey", setup.nodeParams.nodeId.toString())))
@@ -445,8 +460,10 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
     copyURI.setOnAction(new EventHandler[ActionEvent] {
       override def handle(event: ActionEvent): Unit = Option(row.getItem) match {
         case Some(pn) => ContextMenuUtils.copyToClipboard(
-          if (pn.addresses.nonEmpty) s"${pn.nodeId.toString}@${HostAndPort.fromParts(pn.addresses.head.getHostString, pn.addresses.head.getPort)}"
-          else "no URI Known")
+          pn.addresses.headOption match {
+            case Some(firstAddress) => s"${pn.nodeId.toString}@${HostAndPort.fromParts(firstAddress.socketAddress.getHostString, firstAddress.socketAddress.getPort)}"
+            case None => "no URI Known"
+          })
         case None =>
       }
     })
@@ -487,14 +504,6 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
     rowContextMenu.getItems.addAll(copyChannelId, copyNode1, copyNode2)
     row.setContextMenu(rowContextMenu)
     row
-  }
-
-  @FXML def handleExportDot() = {
-    val fileChooser = new FileChooser
-    fileChooser.setTitle("Save as")
-    fileChooser.getExtensionFilters.addAll(new ExtensionFilter("DOT File (*.dot)", "*.dot"))
-    val file = fileChooser.showSaveDialog(getWindow.orNull)
-    if (file != null) handlers.exportToDot(file)
   }
 
   @FXML def handleOpenChannel() = {
@@ -565,5 +574,9 @@ class MainController(val handlers: Handlers, val hostServices: HostServices) ext
   def positionAtCenter(childStage: Stage): Unit = {
     childStage.setX(getWindow.map(w => w.getX + w.getWidth / 2 - childStage.getWidth / 2).getOrElse(0))
     childStage.setY(getWindow.map(w => w.getY + w.getHeight / 2 - childStage.getHeight / 2).getOrElse(0))
+  }
+
+  def refreshTotalBalance(total: MilliSatoshi): Unit = {
+    statusBalanceLabel.setText(CoinUtils.formatAmountInUnit(total, FxApp.getUnit, withUnit = true))
   }
 }
