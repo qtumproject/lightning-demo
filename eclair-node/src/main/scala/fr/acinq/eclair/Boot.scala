@@ -29,7 +29,7 @@ import scala.util.{Failure, Success}
   */
 object Boot extends App with Logging {
 
-  val datadir = new File(System.getProperty("eclair.datadir", System.getProperty("user.home") + "/.eclair"))
+  val datadir = new File(System.getProperty("eclair.datadir", System.getProperty("user.home") + "/.qtum-eclair"))
 
   try {
     val plugins = Plugin.loadPlugins(args.map(new File(_)))
