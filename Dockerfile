@@ -31,7 +31,7 @@ COPY eclair-node/pom.xml eclair-node/pom.xml
 COPY eclair-node-gui/pom.xml eclair-node-gui/pom.xml
 RUN mkdir -p eclair-core/src/main/scala && touch eclair-core/src/main/scala/empty.scala
 # Blank build. We only care about eclair-node, and we use install because eclair-node depends on eclair-core
-RUN mvn install -pl lightning-node -am
+RUN mvn install -DskipTests -pl eclair-node -am
 RUN mvn clean
 
 # Only then do we copy the sources
@@ -45,7 +45,7 @@ RUN mvn package -pl eclair-node -am -DskipTests -Dgit.commit.id=notag -Dgit.comm
 FROM openjdk:8u181-jre-slim
 WORKDIR /app
 # Lightning only needs the lightning-node-*.jar to run
-COPY --from=BUILD /usr/src/eclair-node/target/lightning-node-*.jar .
+COPY --from=BUILD /usr/src/eclair-node/target/lightning-*.jar .
 RUN ln `ls` eclair-node.jar
 
 ENV ECLAIR_DATADIR=/data
