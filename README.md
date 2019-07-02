@@ -4,7 +4,7 @@
 [![codecov](https://codecov.io/gh/acinq/eclair/branch/master/graph/badge.svg)](https://codecov.io/gh/acinq/eclair)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Lightning** is a scala implementation of the Lightning Network. It can run with or without a GUI, and a JSON-RPC API is also available.
+**Eclair** is a scala implementation of the Lightning Network. It can run with or without a GUI, and a JSON-RPC API is also available.
 
 This software follows the [Lightning Network Specifications (BOLTs)](https://github.com/lightningnetwork/lightning-rfc). Other implementations include [c-lightning](https://github.com/ElementsProject/lightning) and [lnd](https://github.com/LightningNetwork/lnd).
  
