@@ -1,4 +1,4 @@
-# Building Lightning
+# Building Qtum Eclair
 
 ## Requirements
 - [OpenJDK 11](https://jdk.java.net/11/).

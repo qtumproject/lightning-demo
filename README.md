@@ -4,17 +4,17 @@
 [![codecov](https://codecov.io/gh/acinq/eclair/branch/master/graph/badge.svg)](https://codecov.io/gh/acinq/eclair)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
-**Eclair** is a scala implementation of the Lightning Network. It can run with or without a GUI, and a JSON-RPC API is also available.
+**Qtum Eclair** is a scala implementation of the Lightning Network. It can run with or without a GUI, and a JSON-RPC API is also available. Qtum Eclair is a fork of [Eclair](https://github.com/ACINQ/eclair) to be compatible with Qtum.
 
-This software follows the [Lightning Network Specifications (BOLTs)](https://github.com/lightningnetwork/lightning-rfc). Other implementations include [c-lightning](https://github.com/ElementsProject/lightning) and [lnd](https://github.com/LightningNetwork/lnd).
+This software follows the [Qtum Lightning Network Specifications](https://github.com/qtumproject/lightning-rfc). Other implementations include [qtum-lightning](https://github.com/qtumproject/qtum-lightning).
  
  ---
  
- :construction: Both the BOLTs and Lightning itself are still a work in progress. Expect things to break/change!
+ :construction: Both the BOLTs and Qtum Eclair itself are still a work in progress. Expect things to break/change!
  
- :rotating_light: If you intend to run Lightning on mainnet:
+ :rotating_light: If you intend to run Qtum Eclair on mainnet:
  - Keep in mind that it is beta-quality software and **don't put too much money** in it
- - Lightning's JSON-RPC API should **NOT** be accessible from the outside world (similarly to QTUM Core API)
+ - Qtum Eclair's JSON-RPC API should **NOT** be accessible from the outside world (similarly to QTUM Core API)
  - Specific [configuration instructions for mainnet](#mainnet-usage) are provided below
  
 ---
@@ -38,12 +38,12 @@ For more information please visit the [API documentation website](https://acinq.
 
 ### Configuring QTUM Core
 
-:warning: Lightning requires QTUM Core 0.17.0 or higher. If you are upgrading an existing wallet, you need to create a new address and send all your funds to that address.
+:warning: Qtum Eclair requires QTUM Core 0.17.0 or higher. If you are upgrading an existing wallet, you need to create a new address and send all your funds to that address.
 
-Lightning needs a _synchronized_, _segwit-ready_, **_zeromq-enabled_**, _wallet-enabled_, _non-pruning_, _tx-indexing_ [QRUM Core](https://github.com/qtumproject/qtum) node. 
-Lightning will use any QTUM it finds in the QTUM Core wallet to fund any channels you choose to open. Lightning will return QTUM from closed channels to this wallet.
+Qtum Eclair needs a _synchronized_, _segwit-ready_, **_zeromq-enabled_**, _wallet-enabled_, _non-pruning_, _tx-indexing_ [QRUM Core](https://github.com/qtumproject/qtum) node. 
+Qtum Eclair will use any QTUM it finds in the QTUM Core wallet to fund any channels you choose to open. Qtum Eclair will return QTUM from closed channels to this wallet.
 
-Run bitcoind with the following minimal `qtum.conf`:
+Run qtumd with the following minimal `qtum.conf`:
 ```
 server=1
 rpcuser=foo
@@ -54,13 +54,13 @@ zmqpubrawblock=tcp://127.0.0.1:29000
 zmqpubrawtx=tcp://127.0.0.1:29000
 ```
 
-### Installing Lightning
+### Installing Qtum Eclair
 
-Lightning is developed in [Scala](https://www.scala-lang.org/), a powerful functional language that runs on the JVM, and is packaged as a JAR (Java Archive) file. We provide 2 different packages, which internally use the same core libraries:
+Qtum Eclair is developed in [Scala](https://www.scala-lang.org/), a powerful functional language that runs on the JVM, and is packaged as a JAR (Java Archive) file. We provide 2 different packages, which internally use the same core libraries:
 * eclair-node, which is a headless application that you can run on servers and desktops, and control from the command line
 * eclair-node-gui, which also includes a JavaFX GUI
 
-To run Lightning, you first need to install Java, we recommend that you use [OpenJDK 11](https://jdk.java.net/11/). Lightning will also run on Oracle JDK 1.8, Oracle JDK 11, and other versions of OpenJDK but we don't recommend using them.
+To run Qtum Eclair, you first need to install Java, we recommend that you use [OpenJDK 11](https://jdk.java.net/11/). Qtum Eclair will also run on Oracle JDK 1.8, Oracle JDK 11, and other versions of OpenJDK but we don't recommend using them.
 
 Then download the latest fat jar and depending on whether or not you want a GUI run the following command:
 * with GUI:
@@ -72,11 +72,11 @@ java -jar eclair-node-gui-<version>-<commit_id>.jar
 java -jar eclair-node-<version>-<commit_id>.jar
 ```
 
-### Configuring Lightning
+### Configuring Qtum Eclair
 
 #### Configuration file
 
-Lighting reads its configuration file, and write its logs, to `~/.qtum-eclair` by default.
+Qtum Eclair reads its configuration file, and write its logs, to `~/.qtum-eclair` by default.
 
 To change your node's configuration, create a file named `eclair.conf` in `~/.qtum-eclair`. Here's an example configuration file:
 
@@ -94,10 +94,10 @@ name                         | description                                      
  eclair.api.enabled          | Enable/disable the API                                                                | false. By default the API is disabled. If you want to enable it, you must set a password.
  eclair.api.port             | API HTTP port                                                                         | 8080
  eclair.api.password         | API password (BASIC)                                                                  | "" (must be set if the API is enabled)
- eclair.bitcoind.rpcuser     | Bitcoin Core RPC user                                                                 | foo
- eclair.bitcoind.rpcpassword | Bitcoin Core RPC password                                                             | bar
- eclair.bitcoind.zmqblock    | Bitcoin Core ZMQ block address                                                        | "tcp://127.0.0.1:29000"
- eclair.bitcoind.zmqtx       | Bitcoin Core ZMQ tx address                                                           | "tcp://127.0.0.1:29000"
+ eclair.bitcoind.rpcuser     | Qtum Core RPC user                                                                 | foo
+ eclair.bitcoind.rpcpassword | Qtum Core RPC password                                                             | bar
+ eclair.bitcoind.zmqblock    | Qtum Core ZMQ block address                                                        | "tcp://127.0.0.1:29000"
+ eclair.bitcoind.zmqtx       | Qtum Core ZMQ tx address                                                           | "tcp://127.0.0.1:29000"
  eclair.gui.unit             | Unit in which amounts are displayed (possible values: msat, sat, bits, mbtc, btc)     | btc
 
 Quotes are not required unless the value contains special characters. Full syntax guide [here](https://github.com/lightbend/config/blob/master/HOCON.md).
@@ -108,7 +108,7 @@ Quotes are not required unless the value contains special characters. Full synta
 
 Some advanced parameters can be changed with java environment variables. Most users won't need this and can skip this section.
 
-:warning: Using separate `datadir` is mandatory if you want to run **several instances of lightning** on the same machine. You will also have to change ports in `eclair.conf` (see above).
+:warning: Using separate `datadir` is mandatory if you want to run **several instances of Qtum Eclair** on the same machine. You will also have to change ports in `eclair.conf` (see above).
 
 name                  | description                                | default value
 ----------------------|--------------------------------------------|--------------
@@ -123,7 +123,7 @@ java -Declair.datadir=/tmp/node1 -jar lightning-capsule.jar
 
 #### Logging
 
-Eclair uses [`logback`](https://logback.qos.ch) for logging. To use a different configuration, and override the internal logback.xml, run:
+Qtum Eclair uses [`logback`](https://logback.qos.ch) for logging. To use a different configuration, and override the internal logback.xml, run:
 
 ```shell
 java -Dlogback.configurationFile=/path/to/logback-custom.xml -jar eclair-node-gui-<version>-<commit_id>.jar
@@ -181,8 +181,8 @@ java -jar eclair-node-<version>-<commit_id>.jar <plugin1.jar> <plugin2.jar> <...
 
 ## Testnet usage
 
-Eclair is configured to run on mainnet by default, but you can still run it on testnet (or regtest): start your Bitcoin Node in
- testnet mode (add `testnet=1` in `bitcoin.conf` or start with `-testnet`), and change Eclair's chain parameter and Bitcoin RPC port:
+Eclair is configured to run on mainnet by default, but you can still run it on testnet (or regtest): start your Qtum Node in
+ testnet mode (add `testnet=1` in `qtum.conf` or start with `-testnet`), and change Eclair's chain parameter and Qtum RPC port:
 
 ```
 eclair.chain=testnet
@@ -190,8 +190,8 @@ eclair.bitcoind.rpcport=18332
 ```
 Following are the minimum configuration files you need to use for QTUM Core and Lightning.
 
-You may also want to take advantage of the new configuration sections in `bitcoin.conf` to manage parameters that are network specific, 
-so you can easily run your bitcoin node on both mainnet and testnet. For example you could use:
+You may also want to take advantage of the new configuration sections in `qtum.conf` to manage parameters that are network specific, 
+so you can easily run your qtum node on both mainnet and testnet. For example you could use:
 ### QTUM Core configuration
 
 ```

@@ -54,14 +54,14 @@ class FxApp extends Application with Logging {
     case e@TCPBindException(port) =>
       notifyPreloader(new ErrorNotification("Setup", s"Could not bind to port $port", e))
     case e@BitcoinRPCConnectionException =>
-      notifyPreloader(new ErrorNotification("Setup", "Could not connect to Bitcoin Core using JSON-RPC.", e))
-      notifyPreloader(new AppNotification(InfoAppNotification, "Make sure that Bitcoin Core is up and running and RPC parameters are correct."))
+      notifyPreloader(new ErrorNotification("Setup", "Could not connect to Qtum Core using JSON-RPC.", e))
+      notifyPreloader(new AppNotification(InfoAppNotification, "Make sure that Qtum Core is up and running and RPC parameters are correct."))
     case e@BitcoinZMQConnectionTimeoutException =>
-      notifyPreloader(new ErrorNotification("Setup", "Could not connect to Bitcoin Core using ZMQ.", e))
-      notifyPreloader(new AppNotification(InfoAppNotification, "Make sure that Bitcoin Core is up and running and ZMQ parameters are correct."))
+      notifyPreloader(new ErrorNotification("Setup", "Could not connect to Qtum Core using ZMQ.", e))
+      notifyPreloader(new AppNotification(InfoAppNotification, "Make sure that Qtum Core is up and running and ZMQ parameters are correct."))
     case e@IncompatibleDBException =>
       notifyPreloader(new ErrorNotification("Setup", "Breaking changes!", e))
-      notifyPreloader(new AppNotification(InfoAppNotification, "Lightning is still in alpha, and under heavy development. Last update was not backward compatible."))
+      notifyPreloader(new AppNotification(InfoAppNotification, "Qtum Eclair is still in alpha, and under heavy development. Last update was not backward compatible."))
       notifyPreloader(new AppNotification(InfoAppNotification, "Please reset your datadir."))
     case e@IncompatibleNetworkDBException =>
       notifyPreloader(new ErrorNotification("Setup", "Unreadable network database!", e))
@@ -108,7 +108,7 @@ class FxApp extends Application with Logging {
               Platform.runLater(new Runnable {
                 override def run(): Unit = {
                   val scene = new Scene(mainRoot)
-                  primaryStage.setTitle("Lightning")
+                  primaryStage.setTitle("Qtum Eclair")
                   primaryStage.setMinWidth(750)
                   primaryStage.setWidth(980)
                   primaryStage.setMinHeight(400)

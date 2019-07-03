@@ -95,7 +95,7 @@
                         <configuration>
                             <vendor>ACINQ</vendor>
                             <needShortcut>true</needShortcut>
-                            <appName>Lightning</appName>
+                            <appName>Qtum Eclair</appName>
                             <nativeReleaseVersion>${project.version}</nativeReleaseVersion>
                             <skipNativeVersionNumberSanitizing>true</skipNativeVersionNumberSanitizing>
                             <nativeOutputDir>${project.build.directory}/jfx/installer</nativeOutputDir>

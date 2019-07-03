@@ -44,7 +44,7 @@ RUN mvn package -pl eclair-node -am -DskipTests -Dgit.commit.id=notag -Dgit.comm
 # We currently use a debian image for runtime because of some jni-related issue with sqlite
 FROM openjdk:8u181-jre-slim
 WORKDIR /app
-# Lightning only needs the lightning-node-*.jar to run
+# Qtum Eclair only needs the lightning-node-*.jar to run
 COPY --from=BUILD /usr/src/eclair-node/target/lightning-*.jar .
 RUN ln `ls` eclair-node.jar
 
