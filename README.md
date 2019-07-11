@@ -40,7 +40,7 @@ For more information please visit the [API documentation website](https://acinq.
 
 :warning: Qtum Eclair requires QTUM Core 0.17.0 or higher. If you are upgrading an existing wallet, you need to create a new address and send all your funds to that address.
 
-Qtum Eclair needs a _synchronized_, _segwit-ready_, **_zeromq-enabled_**, _wallet-enabled_, _non-pruning_, _tx-indexing_ [QRUM Core](https://github.com/qtumproject/qtum) node. 
+Qtum Eclair needs a _synchronized_, _segwit-ready_, **_zeromq-enabled_**, _wallet-enabled_, _non-pruning_, _tx-indexing_ [Qtum Core](https://github.com/qtumproject/qtum) node. 
 Qtum Eclair will use any QTUM it finds in the QTUM Core wallet to fund any channels you choose to open. Qtum Eclair will return QTUM from closed channels to this wallet.
 
 Run qtumd with the following minimal `qtum.conf`:
